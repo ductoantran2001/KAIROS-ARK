@@ -1,0 +1,9 @@
+KAIROS-ARK Cohere Benchmark Results
+===================================
+Model: command-r-08-2024
+Runs: 5
+
+Average: 659.62 ms
+Median:  674.24 ms
+Min:     603.88 ms
+Max:     688.64 ms
