@@ -683,6 +683,13 @@ impl PyKernel {
         }))
     }
 
+    /// Clear the shared memory pool.
+    fn clear_shared_memory(&self) -> PyResult<()> {
+        use crate::core::shared_memory::global_store;
+        global_store().clear();
+        Ok(())
+    }
+
     /// Save the current audit log to a JSONL file.
     fn save_ledger(&self, path: String) -> PyResult<()> {
         use crate::core::persistence::{DurableLedger, LedgerConfig};
