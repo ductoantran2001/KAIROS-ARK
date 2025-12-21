@@ -1009,6 +1009,76 @@ impl PyKernel {
             .map_err(|e| PyRuntimeError::new_err(format!("Serialization error: {}", e)))
     }
 
+    // ===== Phase 6: HITL Approval Gateway =====
+
+    /// Request approval for a sensitive action.
+    fn request_approval(&self, run_id: String, node_id: String, reason: String) -> PyResult<String> {
+        use crate::governance::approval::{global_gateway, ApprovalRequest};
+        
+        let request = ApprovalRequest::new(run_id, node_id, reason);
+        let id = global_gateway().request_approval(request);
+        Ok(id)
+    }
+
+    /// Approve a pending request.
+    fn approve(&self, request_id: String, approver: Option<String>) -> PyResult<bool> {
+        use crate::governance::approval::global_gateway;
+        Ok(global_gateway().approve(&request_id, approver.as_deref()))
+    }
+
+    /// Reject a pending request.
+    fn reject(&self, request_id: String, reason: String, rejector: Option<String>) -> PyResult<bool> {
+        use crate::governance::approval::global_gateway;
+        Ok(global_gateway().reject(&request_id, &reason, rejector.as_deref()))
+    }
+
+    /// Check approval status.
+    fn check_approval(&self, request_id: String) -> PyResult<Option<String>> {
+        use crate::governance::approval::global_gateway;
+        Ok(global_gateway().check_status(&request_id).map(|s| s.as_str().to_string()))
+    }
+
+    /// List pending approvals.
+    fn list_pending_approvals<'py>(&self, py: Python<'py>) -> PyResult<&'py PyList> {
+        use crate::governance::approval::global_gateway;
+        
+        let pending = global_gateway().list_pending();
+        let py_list = PyList::empty(py);
+        
+        for req in pending {
+            let dict = PyDict::new(py);
+            dict.set_item("id", &req.id)?;
+            dict.set_item("run_id", &req.run_id)?;
+            dict.set_item("node_id", &req.node_id)?;
+            dict.set_item("reason", &req.reason)?;
+            dict.set_item("created_at", req.created_at)?;
+            py_list.append(dict)?;
+        }
+        
+        Ok(py_list)
+    }
+
+    // ===== Phase 6: Audit Verification =====
+
+    /// Sign a ledger for compliance.
+    fn sign_ledger(&self, ledger_json: String, run_id: String) -> PyResult<String> {
+        use crate::governance::verification::SignedLedger;
+        
+        let signed = SignedLedger::new(ledger_json, run_id);
+        serde_json::to_string(&signed)
+            .map_err(|e| PyRuntimeError::new_err(format!("Serialization error: {}", e)))
+    }
+
+    /// Verify a signed ledger.
+    fn verify_ledger(&self, signed_json: String) -> PyResult<bool> {
+        use crate::governance::verification::SignedLedger;
+        
+        let signed: SignedLedger = serde_json::from_str(&signed_json)
+            .map_err(|e| PyRuntimeError::new_err(format!("Invalid JSON: {}", e)))?;
+        
+        Ok(signed.verify().valid)
+    }
+
     fn __repr__(&self) -> String {
         format!(
             "PyKernel(nodes={}, events={}, seed={:?})",
@@ -1018,3 +1088,4 @@ impl PyKernel {
         )
     }
 }
+
