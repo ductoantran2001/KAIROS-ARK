@@ -11,7 +11,7 @@ except ImportError:
 class ArkCohereConnector(ArkBaseConnector):
     """Connector for Cohere models."""
     
-    def __init__(self, model="command-r-plus", embedding_model="embed-english-v3.0", api_key=None, agent=None):
+    def __init__(self, model="command-r-08-2024", embedding_model="embed-english-v3.0", api_key=None, agent=None):
         super().__init__(agent=agent)
         if not HAS_COHERE:
             raise ImportError("ArkCohereConnector requires 'cohere' package. Install via pip.")

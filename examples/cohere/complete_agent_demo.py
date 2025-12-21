@@ -11,7 +11,7 @@ from kairos_ark import Agent, Policy, Cap
 from kairos_ark.connectors import ArkCohereConnector
 
 # --- Configuration ---
-GEN_MODEL = "command-r-plus"
+GEN_MODEL = "command-r-08-2024"
 EMBED_MODEL = "embed-english-v3.0"
 
 def complete_agent_workflow():
