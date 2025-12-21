@@ -265,9 +265,97 @@ Policy.read_only()    # Only FILE_SYSTEM_READ, MEMORY_ACCESS, LLM_CALL
 | Metric | Result |
 |--------|--------|
 | Parallel Speedup | 2× 100ms tasks → ~100ms total |
-| Node Throughput | >400,000 nodes/second |
+| Node Throughput | **720,000+ nodes/second** |
 | Policy Check | ~3μs per capability check |
-| Event Logging | <1μs per event |
+| Event Logging | ~7μs per event |
+
+---
+
+## Phase 3: Persistence & Replay
+
+KAIROS-ARK supports durable execution with disk-based event logging and state snapshots.
+
+### Save and Load Ledger
+
+```python
+from kairos_ark import Agent
+
+agent = Agent(seed=42)
+agent.add_node("task", lambda: "result")
+agent.execute("task")
+
+# Save execution log
+agent.save_ledger("/path/to/run.jsonl")
+
+# Load later for analysis
+events = agent.load_ledger("/path/to/run.jsonl")
+```
+
+### Replay Execution
+
+```python
+# Reconstruct state without re-executing handlers
+state = agent.replay("/path/to/run.jsonl")
+print(state["clock_value"])   # Final timestamp
+print(state["node_outputs"])  # All outputs
+```
+
+### State Snapshots
+
+```python
+# Create checkpoint for fast recovery
+agent.create_snapshot("/path/to/snapshot.json", "run_001")
+
+# Load snapshot
+snapshot = agent.load_snapshot("/path/to/snapshot.json")
+```
+
+---
+
+## Phase 4: Zero-Copy IPC & Plugins
+
+Extreme performance optimizations for large data and native plugins.
+
+### Shared Memory
+
+```python
+# Write large data once
+handle = agent.kernel.write_shared(list(data))
+
+# Read by handle (avoids serialization)
+result = bytes(agent.kernel.read_shared(handle))
+
+# Pool statistics
+stats = agent.kernel.shared_memory_stats()
+# {'capacity': 67108864, 'used': 1000, 'allocations': 1}
+```
+
+### Native Plugins
+
+```python
+# Register plugin
+agent.kernel.register_plugin("calculator", "1.0")
+
+# Invoke plugin
+result = agent.kernel.invoke_plugin("calculator", "2+2")
+
+# List all plugins
+plugins = agent.kernel.list_plugins()
+```
+
+---
+
+## Testing
+
+```bash
+# Run comprehensive test suite (59+ tests)
+pytest tests/test_comprehensive.py -v
+
+# Run all tests
+pytest tests/ -v
+```
+
+---
 
 ## License
 
@@ -276,4 +364,3 @@ MIT License - see [LICENSE](LICENSE) for details.
 ## Author
 
 **YASSERRMD**
-
