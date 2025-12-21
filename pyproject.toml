@@ -7,8 +7,6 @@ name = "kairos_ark"
 version = "0.1.0"
 description = "KAIROS-ARK: A deterministic multi-threaded scheduler for agentic AI workflows"
 readme = "README.md"
-license = { file = "LICENSE" }
-requires-python = ">=3.8, <3.14"
 authors = [
     { name = "YASSERRMD" }
 ]
@@ -21,6 +19,7 @@ classifiers = [
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
+    "License :: OSI Approved :: MIT License",
 ]
 
 [tool.maturin]
