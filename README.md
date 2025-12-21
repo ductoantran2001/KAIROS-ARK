@@ -150,10 +150,26 @@ KAIROS-ARK acts as a native backend for other frameworks, with built-in adapters
 from kairos_ark.integrations.langgraph import ArkNativeCheckpointer
 checkpointer = ArkNativeCheckpointer(agent)
 
-# 2. Gemini Connector
-from kairos_ark.connectors import ArkAIConnector
-llm = ArkAIConnector(model_name="gemini-2.0-flash")
-response = llm.generate("Hello ARK")
+# 2. Universal Connectors
+from kairos_ark.connectors import (
+    ArkGeminiConnector,
+    ArkOpenAIConnector,
+    ArkClaudeConnector,
+    ArkOllamaConnector
+)
+
+# Gemini (Google)
+llm = ArkGeminiConnector(model_name="gemini-2.0-flash-lite")
+
+# OpenAI / Groq / DeepSeek
+groq = ArkOpenAIConnector(
+    base_url="https://api.groq.com/openai/v1",
+    api_key="gsk_...",
+    model="llama3-70b-8192"
+)
+
+# Local (Ollama)
+local_llm = ArkOllamaConnector(model="llama3")
 
 # 3. Native Tools (Zero-Copy Ready)
 from kairos_ark.tools import ArkTools
