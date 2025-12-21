@@ -12,6 +12,14 @@
 
 </div>
 
+<br/>
+
+<div align="center">
+  <img src="assets/architecture_diagram.png" alt="KAIROS-ARK Architecture" width="100%">
+</div>
+
+<br/>
+
 ## Overview
 
 **KAIROS-ARK** is a high-performance, deterministic execution kernel designed for mission-critical agentic AI workflows. Unlike traditional frameworks that prioritize prompt engineering, KAIROS-ARK prioritizes **system integrity**, **reproducibility**, and **industrial-grade governance**.
