@@ -10,7 +10,8 @@ except ImportError:
 class ArkOpenAIConnector(ArkBaseConnector):
     """Generic Connector for OpenAI-compatible APIs (OpenAI, Groq, DeepSeek)."""
     
-    def __init__(self, model: str, api_key: str = None, base_url: str = None, env_key: str = "OPENAI_API_KEY"):
+    def __init__(self, model: str, api_key: str = None, base_url: str = None, env_key: str = "OPENAI_API_KEY", agent=None):
+        super().__init__(agent=agent)
         if not HAS_OPENAI:
             raise ImportError("ArkOpenAIConnector requires 'openai' package. Install via pip.")
             
@@ -22,6 +23,7 @@ class ArkOpenAIConnector(ArkBaseConnector):
         self.client = OpenAI(api_key=self.api_key, base_url=base_url)
 
     def generate(self, prompt: str) -> str:
+        self._enforce_policy()
         response = self.client.chat.completions.create(
             model=self.model,
             messages=[{"role": "user", "content": prompt}]
@@ -40,20 +42,22 @@ class ArkOpenAIConnector(ArkBaseConnector):
 
 class ArkGroqConnector(ArkOpenAIConnector):
     """Connector for Groq (Llama 3, Mixtral) via OpenAI Protocol."""
-    def __init__(self, model="llama3-70b-8192", api_key=None):
+    def __init__(self, model="llama3-70b-8192", api_key=None, **kwargs):
         super().__init__(
             model=model,
             api_key=api_key,
             base_url="https://api.groq.com/openai/v1",
-            env_key="GROQ_API_KEY"
+            env_key="GROQ_API_KEY",
+            **kwargs
         )
 
 class ArkDeepSeekConnector(ArkOpenAIConnector):
     """Connector for DeepSeek via OpenAI Protocol."""
-    def __init__(self, model="deepseek-chat", api_key=None):
+    def __init__(self, model="deepseek-chat", api_key=None, **kwargs):
         super().__init__(
             model=model,
             api_key=api_key,
             base_url="https://api.deepseek.com",
-            env_key="DEEPSEEK_API_KEY"
+            env_key="DEEPSEEK_API_KEY",
+            **kwargs
         )

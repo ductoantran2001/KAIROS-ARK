@@ -10,7 +10,8 @@ except ImportError:
 class ArkClaudeConnector(ArkBaseConnector):
     """Connector for Anthropic Claude models."""
     
-    def __init__(self, model="claude-3-5-sonnet-20240620", api_key=None):
+    def __init__(self, model="claude-3-5-sonnet-20240620", api_key=None, agent=None):
+        super().__init__(agent=agent)
         if not HAS_ANTHROPIC:
             raise ImportError("ArkClaudeConnector requires 'anthropic' package.")
             
@@ -22,6 +23,7 @@ class ArkClaudeConnector(ArkBaseConnector):
         self.model = model
 
     def generate(self, prompt: str) -> str:
+        self._enforce_policy()
         response = self.client.messages.create(
             model=self.model,
             max_tokens=1024,

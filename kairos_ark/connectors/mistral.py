@@ -11,7 +11,8 @@ except ImportError:
 class ArkMistralConnector(ArkBaseConnector):
     """Connector for Mistral AI."""
     
-    def __init__(self, model="mistral-tiny", api_key=None):
+    def __init__(self, model="mistral-tiny", api_key=None, agent=None):
+        super().__init__(agent=agent)
         if not HAS_MISTRAL:
             raise ImportError("ArkMistralConnector requires 'mistralai' package.")
             
@@ -23,6 +24,7 @@ class ArkMistralConnector(ArkBaseConnector):
         self.model = model
 
     def generate(self, prompt: str) -> str:
+        self._enforce_policy()
         response = self.client.chat(
             model=self.model,
             messages=[ChatMessage(role="user", content=prompt)]

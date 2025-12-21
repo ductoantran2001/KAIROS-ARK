@@ -476,6 +476,26 @@ class Agent:
             Tuple of (allowed: bool, reason: Optional[str])
         """
         return self.kernel.check_capability(tool_id)
+
+    def check_capability(self, cap_flag: int) -> tuple:
+        """
+        Check if a raw capability flag is allowed under current policy.
+        
+        Args:
+            cap_flag: The capability integer to check (e.g. Cap.LLM_CALL).
+            
+        Returns:
+            Tuple of (allowed: bool, reason: Optional[str])
+        """
+        # We need to expose a method on the compiled kernel for raw capability checking
+        # If PyKernel.check_raw_capability exists, use it.
+        # Otherwise, we can implement Python-side check if we have the policy object locally.
+        if self._policy:
+            if self._policy.has_capability(cap_flag):
+                return (True, None)
+            else:
+                return (False, f"Capability 0x{cap_flag:x} denied by policy '{self._policy.name}'")
+        return (True, None)
     
     def filter_content(self, content: str) -> tuple:
         """
