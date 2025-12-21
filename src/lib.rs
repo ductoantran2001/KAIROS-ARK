@@ -5,6 +5,7 @@
 //! bit-for-bit identical replayability.
 
 pub mod core;
+pub mod adapters;
 
 use pyo3::prelude::*;
 use crate::core::{PyKernel, PyEvent, PyNode, PyPolicy, PyCap};
