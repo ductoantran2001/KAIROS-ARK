@@ -57,6 +57,40 @@ pub enum EventType {
         /// Whether execution succeeded
         success: bool,
     },
+    /// Tool execution allowed by policy
+    PolicyAllow {
+        /// Tool that was allowed
+        tool_id: String,
+        /// Capabilities that were checked
+        capabilities_checked: Vec<String>,
+    },
+    /// Tool execution denied by policy
+    PolicyDeny {
+        /// Tool that was denied
+        tool_id: String,
+        /// Rule that triggered the denial
+        rule: String,
+        /// Human-readable reason
+        reason: String,
+    },
+    /// Content was redacted by policy
+    ContentRedacted {
+        /// Original content length
+        original_length: usize,
+        /// Redacted content length
+        redacted_length: usize,
+        /// Patterns that matched
+        patterns_matched: Vec<String>,
+    },
+    /// Call limit exceeded for tool
+    CallLimitExceeded {
+        /// Tool that exceeded limit
+        tool_id: String,
+        /// The configured limit
+        limit: u32,
+        /// Number of attempts made
+        attempted: u32,
+    },
 }
 
 impl EventType {
@@ -73,6 +107,10 @@ impl EventType {
             EventType::RngSeedCaptured { .. } => "RNG_SEED_CAPTURED",
             EventType::ExecutionStart { .. } => "EXECUTION_START",
             EventType::ExecutionEnd { .. } => "EXECUTION_END",
+            EventType::PolicyAllow { .. } => "POLICY_ALLOW",
+            EventType::PolicyDeny { .. } => "POLICY_DENY",
+            EventType::ContentRedacted { .. } => "CONTENT_REDACTED",
+            EventType::CallLimitExceeded { .. } => "CALL_LIMIT_EXCEEDED",
         }
     }
 }
