@@ -805,9 +805,32 @@ class Agent:
         Get statistics about shared memory usage.
         
         Returns:
-            Dict with stats (active_handles, bytes_live, peak_bytes, etc.)
+            Dict with stats:
+            - active_handles: Number of currently allocated buffers
+            - bytes_live: Total bytes currently allocated
+            - peak_bytes: Peak bytes allocated
+            - soft_limit_hits: Number of times soft limit was exceeded
+            - hard_limit_hits: Number of times allocation failed
         """
         return dict(self.kernel.shared_memory_stats())
+
+    def reset_execution_memory(self) -> None:
+        """
+        Clear all execution-scoped shared memory.
+        
+        This resets the shared memory arena, invalidating all handles.
+        Use this between independent runs to prevent fragmentation.
+        """
+        self.kernel.reset_execution_memory()
+
+    def list_live_shared(self) -> List[tuple]:
+        """
+        Debug: List all live shared memory handles and their sizes.
+        
+        Returns:
+            List of (handle_id, size_bytes).
+        """
+        return list(self.kernel.debug_list_handles())
 
     @contextmanager
     def shared_buffer(self, data: bytes):

@@ -145,7 +145,7 @@ assert stats["active_handles"] == 0
 assert stats["bytes_live"] == 0
 
 # 6. Safety Checks (Double Free / Stale Handle)
-print("Testing Safety (Double Free)...")
+print("\nTesting Safety (Double Free)...")
 try:
     agent.read_shared(handle_id)
     print("❌ ERROR: Read on freed handle should have failed!")
@@ -159,7 +159,7 @@ except Exception as e:
     print(f"✅ Correctly caught double free: {e}")
 
 # 7. Context Manager
-print("Testing Context Manager...")
+print("\nTesting Context Manager...")
 with agent.shared_buffer(b"temporary_data") as h:
     print(f"Inside context: {agent.get_shared_stats()}")
     data = agent.read_shared(h)
@@ -168,6 +168,33 @@ with agent.shared_buffer(b"temporary_data") as h:
 print(f"Outside context: {agent.get_shared_stats()}")
 assert agent.get_shared_stats()["active_handles"] == 0
 print("✅ Context Manager Verified")
+
+# 7a. New Features Test (Limits & Debug Handles)
+print("\nTesting Hard/Soft Limits & Debug Tools...")
+# Default Max: 1GB, Soft: 850MB. Single Alloc Max: 100MB.
+# We will try to alloc > 100MB to trigger Single Limit Hit (Hard Limit)
+try:
+    huge_data = b"x" * (101 * 1024 * 1024) # 101 MB
+    agent.write_shared(huge_data)
+    print("❌ ERROR: 101MB allocation should have failed!")
+except Exception as e:
+    print(f"✅ Correctly caught max single alloc limit: {e}")
+    stats = agent.get_shared_stats()
+    print(f"   Hard Limit Hits: {stats['hard_limit_hits']}")
+    assert stats["hard_limit_hits"] > 0
+
+# Test Debug Handle List
+print("Testing Debug Live Handles...")
+h1 = agent.write_shared(b"buffer_1")
+h2 = agent.write_shared(b"buffer_2")
+live = agent.list_live_shared()
+print("Live Handles:", live)
+assert len(live) == 2
+# Verify sizes
+assert any(size == 8 for _, size in live) # "buffer_1" is 8 bytes
+agent.free_shared(h1)
+agent.free_shared(h2)
+print("✅ Live handles cleanup verified")
 
 # 8. Reset
 print("Clearing agent...")

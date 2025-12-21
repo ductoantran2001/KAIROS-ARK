@@ -7,7 +7,7 @@
 //! - Explicit Budget Enforcement (Max bytes, Max single alloc)
 //! - Detailed Statistics
 
-use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
+// use std::sync::atomic::{AtomicU64, Ordering}; // Removed unused imports
 use std::time::{SystemTime, UNIX_EPOCH};
 use parking_lot::RwLock;
 
@@ -41,12 +41,15 @@ pub struct SharedStats {
     pub alloc_count: u64,
     pub free_count: u64,
     pub errors: u64,
+    pub soft_limit_hits: u64,
+    pub hard_limit_hits: u64,
 }
 
 #[derive(Clone, Debug)]
 struct BufferEntry {
     data: Vec<u8>,
     size: usize,
+    #[allow(dead_code)]
     created_at: u64,
 }
 
@@ -86,14 +89,25 @@ impl SharedMemoryStore {
         // 1. Budget Checks
         if size > self.max_single_alloc {
             self.record_error();
+            // We can treat this as a hard limit hit too, conceptually
+            self.stats.write().hard_limit_hits += 1;
             return Err(format!("Allocation too large: {} > {}", size, self.max_single_alloc));
         }
 
         {
-            let stats = self.stats.read();
-            if stats.bytes_live + size > self.max_total_bytes {
-                self.record_error();
+            let mut stats = self.stats.write();
+            let new_usage = stats.bytes_live + size;
+            
+            if new_usage > self.max_total_bytes {
+                stats.errors += 1;
+                stats.hard_limit_hits += 1;
                 return Err(format!("Global memory budget exceeded: {} + {} > {}", stats.bytes_live, size, self.max_total_bytes));
+            }
+            
+            // Soft limit check (85%)
+            let soft_limit = (self.max_total_bytes * 85) / 100;
+            if new_usage > soft_limit {
+                stats.soft_limit_hits += 1;
             }
         }
 
@@ -212,6 +226,19 @@ impl SharedMemoryStore {
     /// Get current statistics.
     pub fn stats(&self) -> SharedStats {
         self.stats.read().clone()
+    }
+
+    /// Debug: List all live handles and their sizes.
+    pub fn list_live_handles(&self) -> Vec<(u64, usize)> {
+        let slots = self.buffer_slots.read();
+        let mut result = Vec::new();
+        for (i, slot) in slots.iter().enumerate() {
+            if let Slot::Occupied { entry, generation } = slot {
+                let id = MemoryHandle::new(i as u32, *generation).id;
+                result.push((id, entry.size));
+            }
+        }
+        result
     }
 
     /// Clear all memory (Debug/Reset).

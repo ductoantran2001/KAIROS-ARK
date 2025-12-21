@@ -42,7 +42,7 @@ It provides a specialized "Operating System" for agents, handling:
 | **⚡ High Throughput** | Process **720,000+ nodes/second** with Rust-native execution. |
 | **🔒 Policy Engine** | Restrict agent capabilities (Network, FS, Exec) at the kernel level. |
 | **⏱️ Time-Travel** | Replay any execution from a ledger with 100% determinism. |
-| **🚀 Zero-Copy** | Pass GB-sized payloads between tasks in microseconds. |
+| **🚀 Zero-Copy** | Safe Generational Arena with Hard/Soft memory limits. |
 | **🤝 Interoperability** | Native adapters for LangGraph, CrewAI, and MCP tools. |
 | **🛡️ Governance** | Cryptographically signed audit logs and enforced HITL protocols. |
 
@@ -139,16 +139,19 @@ print(f"Final State: {state['node_outputs']}")
 agent.create_snapshot("checkpoint.json", "run_001")
 ```
 
-### 🚀 Zero-Copy Shared Memory
-
-Pass large objects (images, embeddings, codebases) between Python/Rust without serialization overhead.
+### 🚀 Zero-Copy Shared Memory (Advanced)
+Pass large objects (images, embeddings, codebases) between Python/Rust without serialization.
+**Now with Generational Safety & Hard Limits.**
 
 ```python
-# Write 1GB data once (~5µs latency)
-handle = agent.kernel.write_shared(large_data_list)
+# 1. Context Manager (Auto-Cleanup)
+with agent.shared_buffer(large_data) as handle:
+    # Zero-copy read in another node
+    result = agent.read_shared(handle)
 
-# Pass unique handle to other nodes
-result = agent.kernel.read_shared(handle)
+# 2. Strict Budgeting & Stats
+stats = agent.get_shared_stats()
+# Tracks: bytes_live, peak_bytes, soft/hard_limit_hits
 ```
 
 ### 🤝 Interoperability & Ecosystem

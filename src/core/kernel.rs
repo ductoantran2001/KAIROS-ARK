@@ -4,7 +4,7 @@
 //! for use from Python code.
 
 use pyo3::prelude::*;
-use pyo3::types::{PyDict, PyList};
+use pyo3::types::{PyDict, PyList, PyTuple};
 use pyo3::exceptions::PyRuntimeError;
 use parking_lot::Mutex;
 use std::collections::HashMap;
@@ -927,8 +927,33 @@ impl PyKernel {
         dict.set_item("alloc_count", stats.alloc_count)?;
         dict.set_item("free_count", stats.free_count)?;
         dict.set_item("errors", stats.errors)?;
+        dict.set_item("soft_limit_hits", stats.soft_limit_hits)?;
+        dict.set_item("hard_limit_hits", stats.hard_limit_hits)?;
         
         Ok(dict.into())
+    }
+
+    /// Debug: List live handles.
+    fn debug_list_handles<'py>(&self, py: Python<'py>) -> PyResult<PyObject> {
+        use crate::core::shared_memory::global_store;
+        
+        let handles = global_store().list_live_handles();
+        let list = PyList::empty(py);
+        
+        for (id, size) in handles {
+            let tuple = PyTuple::new(py, &[id, size as u64])?;
+            list.append(tuple)?;
+        }
+        
+        Ok(list.into())
+    }
+    
+    /// Reset execution-scoped memory.
+    /// Currently aliases to clear() as all memory is execution scoped.
+    fn reset_execution_memory(&self) -> PyResult<()> {
+        use crate::core::shared_memory::global_store;
+        global_store().clear();
+        Ok(())
     }
 
     // ===== Phase 4: Plugins =====

@@ -396,40 +396,60 @@ class TestSharedMemory:
     def test_write_shared(self):
         agent = Agent()
         data = b"test data"
-        handle = agent.kernel.write_shared(list(data))
+        handle = agent.write_shared(data)
         assert handle > 0
 
     def test_read_shared(self):
         agent = Agent()
         data = b"test data"
-        handle = agent.kernel.write_shared(list(data))
-        read = bytes(agent.kernel.read_shared(handle))
+        handle = agent.write_shared(data)
+        read = agent.read_shared(handle)
         assert read == data
 
     def test_shared_memory_stats(self):
         agent = Agent()
-        stats = agent.kernel.shared_memory_stats()
-        assert "capacity" in stats
-        assert "used" in stats
+        stats = agent.get_shared_stats()
+        assert "active_handles" in stats
+        assert "bytes_live" in stats
 
-    def test_shared_memory_capacity(self):
+    def test_context_manager(self):
         agent = Agent()
-        stats = agent.kernel.shared_memory_stats()
-        assert stats["capacity"] == 64 * 1024 * 1024  # 64MB
+        # Clear any previous state from other tests (Shared Memory is global)
+        agent.clear()
+        
+        with agent.shared_buffer(b"temporary") as h:
+             assert agent.read_shared(h) == b"temporary"
+             stats = agent.get_shared_stats()
+             assert stats["active_handles"] == 1
+        
+        # After context
+        stats = agent.get_shared_stats()
+        assert stats["active_handles"] == 0
 
     def test_small_data_round_trip(self):
         agent = Agent()
         data = b"hello"
-        handle = agent.kernel.write_shared(list(data))
-        result = bytes(agent.kernel.read_shared(handle))
+        handle = agent.write_shared(data)
+        result = agent.read_shared(handle)
         assert result == data
 
     def test_medium_data_round_trip(self):
         agent = Agent()
         data = b"x" * 1000
-        handle = agent.kernel.write_shared(list(data))
-        result = bytes(agent.kernel.read_shared(handle))
+        handle = agent.write_shared(data)
+        result = agent.read_shared(handle)
         assert result == data
+
+    def test_stale_handle(self):
+        agent = Agent()
+        handle = agent.write_shared(b"data")
+        agent.free_shared(handle)
+        try:
+            agent.read_shared(handle)
+            assert False, "Should have raised stale handle error"
+        except Exception as e:
+            assert "Shared Memory Error" in str(e)
+
 
 
 # =============================================================================
