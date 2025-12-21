@@ -837,6 +837,85 @@ impl PyKernel {
         }
     }
 
+    // ===== Phase 4: Shared Memory =====
+
+    /// Write data to shared memory pool, return handle ID.
+    fn write_shared(&self, data: Vec<u8>) -> PyResult<u64> {
+        use crate::core::shared_memory::global_store;
+        
+        match global_store().write(&data) {
+            Some(handle) => Ok(handle.id),
+            None => Err(PyRuntimeError::new_err("Failed to allocate shared memory")),
+        }
+    }
+
+    /// Read data from shared memory by handle ID.
+    fn read_shared(&self, handle_id: u64) -> PyResult<Vec<u8>> {
+        use crate::core::shared_memory::global_store;
+        
+        global_store()
+            .read_by_id(handle_id)
+            .ok_or_else(|| PyRuntimeError::new_err("Handle not found or invalid"))
+    }
+
+    /// Get shared memory pool stats.
+    fn shared_memory_stats<'py>(&self, py: Python<'py>) -> PyResult<&'py PyDict> {
+        use crate::core::shared_memory::global_store;
+        
+        let store = global_store();
+        let dict = PyDict::new(py);
+        dict.set_item("capacity", store.capacity())?;
+        dict.set_item("used", store.used())?;
+        dict.set_item("available", store.available())?;
+        dict.set_item("allocations", store.allocation_count())?;
+        Ok(dict)
+    }
+
+    // ===== Phase 4: Plugins =====
+
+    /// Register a Rust-native plugin (for testing).
+    fn register_plugin(&self, name: String, version: String) -> PyResult<String> {
+        use crate::core::plugin::global_loader;
+        
+        let loader = global_loader();
+        let name_clone = name.clone();
+        
+        // Register a simple echo plugin for testing
+        loader.register(&name, &version, move |input| {
+            Ok(format!("Plugin[{}]: {}", name_clone, input))
+        });
+        
+        Ok(name)
+    }
+
+    /// Invoke a registered plugin.
+    fn invoke_plugin(&self, name: String, input: String) -> PyResult<String> {
+        use crate::core::plugin::global_loader;
+        
+        global_loader()
+            .invoke(&name, &input)
+            .map_err(|e| PyRuntimeError::new_err(format!("{}", e)))
+    }
+
+    /// List all loaded plugins.
+    fn list_plugins<'py>(&self, py: Python<'py>) -> PyResult<&'py PyList> {
+        use crate::core::plugin::global_loader;
+        
+        let plugins = global_loader().list();
+        let py_list = PyList::empty(py);
+        
+        for info in plugins {
+            let dict = PyDict::new(py);
+            dict.set_item("name", &info.name)?;
+            dict.set_item("version", &info.version)?;
+            dict.set_item("capabilities", info.capabilities)?;
+            dict.set_item("path", &info.path)?;
+            py_list.append(dict)?;
+        }
+        
+        Ok(py_list)
+    }
+
     fn __repr__(&self) -> String {
         format!(
             "PyKernel(nodes={}, events={}, seed={:?})",
@@ -846,4 +925,3 @@ impl PyKernel {
         )
     }
 }
-
