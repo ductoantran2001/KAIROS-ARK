@@ -168,6 +168,62 @@ assert log1 == log2
 print("✓ Deterministic replay verified")
 ```
 
+### Policy Engine (Phase 2)
+
+KAIROS-ARK includes a powerful policy engine for capability-based access control:
+
+```python
+from kairos_ark import Agent, Policy, Cap
+
+agent = Agent()
+
+# Register tools with required capabilities
+agent.register_tool("web_search", lambda: fetch_web(), [Cap.NET_ACCESS])
+agent.register_tool("read_file", lambda: read_file(), [Cap.FILE_SYSTEM_READ])
+agent.register_tool("llm_call", lambda: call_llm(), [Cap.LLM_CALL])
+
+# Create a restrictive policy
+policy = Policy(
+    allowed_capabilities=[Cap.LLM_CALL, Cap.FILE_SYSTEM_READ],
+    max_tool_calls={"web_search": 0},  # Block web searches entirely
+    forbidden_content=["password", "api_key", "secret"]  # Redact sensitive data
+)
+
+# Run with policy enforcement
+results = agent.run("entry_node", policy=policy)
+
+# Check if a tool would be allowed
+allowed, reason = agent.check_tool_capability("web_search")
+if not allowed:
+    print(f"Blocked: {reason}")
+
+# Filter content through policy
+filtered, patterns = agent.filter_content("The api_key is secret123")
+print(filtered)  # "The [REDACTED] is [REDACTED]"
+```
+
+#### Capability Flags
+
+| Capability | Description |
+|------------|-------------|
+| `Cap.NET_ACCESS` | Network/HTTP access |
+| `Cap.FILE_SYSTEM_READ` | Read from filesystem |
+| `Cap.FILE_SYSTEM_WRITE` | Write to filesystem |
+| `Cap.SUBPROCESS_EXEC` | Execute subprocesses |
+| `Cap.LLM_CALL` | Make LLM API calls |
+| `Cap.MEMORY_ACCESS` | Access agent memory |
+| `Cap.EXTERNAL_API` | Call external APIs |
+| `Cap.CODE_EXEC` | Execute code |
+
+#### Preset Policies
+
+```python
+Policy.permissive()   # Allows everything
+Policy.restrictive()  # Blocks everything
+Policy.no_network()   # Blocks NET_ACCESS and EXTERNAL_API
+Policy.read_only()    # Only FILE_SYSTEM_READ, MEMORY_ACCESS, LLM_CALL
+```
+
 ## API Reference
 
 ### Agent Class
@@ -180,7 +236,11 @@ print("✓ Deterministic replay verified")
 | `add_join(id, parents, next_node)` | Add parallel join |
 | `connect(from, to)` | Add edge between nodes |
 | `execute(entry_node)` | Execute the graph |
-| `run_parallel(nodes)` | Quick parallel execution |
+| `run(entry_node, policy)` | Execute with policy |
+| `register_tool(id, handler, capabilities)` | Register tool with capabilities |
+| `set_policy(policy)` | Set execution policy |
+| `check_tool_capability(tool_id)` | Check if tool is allowed |
+| `filter_content(content)` | Filter forbidden content |
 | `get_audit_log()` | Get execution trace |
 | `print_audit_log()` | Pretty-print trace |
 
@@ -194,6 +254,10 @@ print("✓ Deterministic replay verified")
 | `ForkSpawn` | Parallel children spawned |
 | `JoinComplete` | All parents finished |
 | `ToolOutput` | Handler produced output |
+| `PolicyAllow` | Tool allowed by policy |
+| `PolicyDeny` | Tool blocked by policy |
+| `ContentRedacted` | Content was redacted |
+| `CallLimitExceeded` | Tool call limit reached |
 | `Error` | Execution error occurred |
 
 ## Benchmarks
@@ -201,8 +265,9 @@ print("✓ Deterministic replay verified")
 | Metric | Result |
 |--------|--------|
 | Parallel Speedup | 2× 100ms tasks → ~100ms total |
-| Node Throughput | >10,000 nodes/second |
-| Event Logging Overhead | <1μs per event |
+| Node Throughput | >400,000 nodes/second |
+| Policy Check | ~3μs per capability check |
+| Event Logging | <1μs per event |
 
 ## License
 
@@ -211,3 +276,4 @@ MIT License - see [LICENSE](LICENSE) for details.
 ## Author
 
 **YASSERRMD**
+

@@ -6,11 +6,157 @@ The Agent class provides a user-friendly interface for:
 - Registering Python handlers and conditions
 - Executing graphs with deterministic scheduling
 - Inspecting the audit log
+- Policy enforcement with capability model (Phase 2)
 """
 
 from typing import Any, Callable, Dict, List, Optional, Union
 import json
 import time
+
+
+class Cap:
+    """
+    Capability flags for tool permissions.
+    
+    These flags define what operations a tool can perform.
+    Policies use these to whitelist/blacklist capabilities.
+    
+    Example:
+        ```python
+        from kairos_ark import Cap, Policy
+        
+        # Create a policy that only allows file reads and LLM calls
+        policy = Policy(allowed_capabilities=[Cap.FILE_SYSTEM_READ, Cap.LLM_CALL])
+        ```
+    """
+    NET_ACCESS = 0b00000001          # Network/HTTP access
+    FILE_SYSTEM_READ = 0b00000010    # Read from filesystem
+    FILE_SYSTEM_WRITE = 0b00000100   # Write to filesystem
+    SUBPROCESS_EXEC = 0b00001000     # Execute subprocesses
+    LLM_CALL = 0b00010000            # Make LLM API calls
+    MEMORY_ACCESS = 0b00100000       # Access agent memory
+    SENSITIVE_DATA = 0b01000000      # Access sensitive data
+    EXTERNAL_API = 0b10000000        # Call external APIs
+    CODE_EXEC = 0b100000000          # Execute code
+    DATABASE_ACCESS = 0b1000000000   # Access databases
+    
+    # Presets
+    ALL = 0xFFFFFFFF
+    NONE = 0
+    
+    # Aliases for convenience
+    DISK_READ = FILE_SYSTEM_READ
+    DISK_WRITE = FILE_SYSTEM_WRITE
+    
+    @classmethod
+    def combine(cls, *caps: int) -> int:
+        """Combine multiple capabilities into one."""
+        result = 0
+        for cap in caps:
+            result |= cap
+        return result
+
+
+class Policy:
+    """
+    Agent execution policy with capability restrictions.
+    
+    Policies define what an agent is allowed to do during execution:
+    - Which capabilities (NET_ACCESS, FILE_WRITE, etc.) are permitted
+    - Maximum number of calls per tool
+    - Forbidden content patterns to redact/block
+    
+    Example:
+        ```python
+        from kairos_ark import Policy, Cap
+        
+        # Restrictive policy: only LLM calls, no network, limited tool usage
+        policy = Policy(
+            allowed_capabilities=[Cap.LLM_CALL, Cap.FILE_SYSTEM_READ],
+            max_tool_calls={"web_search": 0, "code_exec": 2},
+            forbidden_content=["password", "api_key", "secret"]
+        )
+        
+        agent.run("entry_node", policy=policy)
+        ```
+    """
+    
+    def __init__(
+        self,
+        allowed_capabilities: Optional[List[int]] = None,
+        max_tool_calls: Optional[Dict[str, int]] = None,
+        forbidden_content: Optional[List[str]] = None,
+        content_action: str = "redact",  # "redact" or "block"
+        name: str = "default",
+    ):
+        """
+        Initialize a policy.
+        
+        Args:
+            allowed_capabilities: List of capability flags (e.g. [Cap.LLM_CALL]).
+                                 Defaults to ALL capabilities if not specified.
+            max_tool_calls: Dict mapping tool_id to maximum allowed calls.
+                           e.g. {"web_search": 2} limits web_search to 2 calls.
+            forbidden_content: List of strings/patterns to redact from outputs.
+            content_action: "redact" to replace matched content, "block" to stop execution.
+            name: Name of this policy (for logging).
+        """
+        if allowed_capabilities is None:
+            self.allowed_capabilities = Cap.ALL
+        else:
+            self.allowed_capabilities = Cap.combine(*allowed_capabilities)
+        
+        self.max_tool_calls = max_tool_calls or {}
+        self.forbidden_content = forbidden_content or []
+        self.content_action = content_action
+        self.name = name
+    
+    @classmethod
+    def permissive(cls) -> "Policy":
+        """Create a policy that allows everything."""
+        return cls(name="permissive")
+    
+    @classmethod
+    def restrictive(cls) -> "Policy":
+        """Create a policy that allows nothing."""
+        return cls(allowed_capabilities=[Cap.NONE], name="restrictive")
+    
+    @classmethod
+    def no_network(cls) -> "Policy":
+        """Create a policy that blocks network access."""
+        all_except_net = Cap.ALL & ~(Cap.NET_ACCESS | Cap.EXTERNAL_API)
+        return cls(allowed_capabilities=[all_except_net], name="no_network")
+    
+    @classmethod
+    def read_only(cls) -> "Policy":
+        """Create a policy that only allows reading."""
+        return cls(
+            allowed_capabilities=[Cap.FILE_SYSTEM_READ, Cap.MEMORY_ACCESS, Cap.LLM_CALL],
+            name="read_only"
+        )
+    
+    def has_capability(self, cap: int) -> bool:
+        """Check if a capability is allowed."""
+        return (self.allowed_capabilities & cap) == cap
+    
+    def get_tool_limit(self, tool_id: str) -> Optional[int]:
+        """Get the call limit for a tool, or None if unlimited."""
+        return self.max_tool_calls.get(tool_id)
+    
+    def to_rust(self):
+        """Convert to Rust PyPolicy for kernel use."""
+        from ._core import PyPolicy
+        return PyPolicy(
+            allowed_capabilities=[self.allowed_capabilities],
+            max_tool_calls=self.max_tool_calls,
+            forbidden_content=self.forbidden_content,
+            content_action=self.content_action,
+            name=self.name,
+        )
+    
+    def __repr__(self) -> str:
+        return f"Policy(name={self.name}, caps=0x{self.allowed_capabilities:x}, limits={self.max_tool_calls})"
+
 
 
 class Agent:
@@ -57,6 +203,8 @@ class Agent:
         self._handlers: Dict[str, Callable] = {}
         self._conditions: Dict[str, Callable] = {}
         self._node_handlers: Dict[str, str] = {}  # node_id -> handler_id mapping
+        self._tools: Dict[str, int] = {}  # tool_id -> required_capabilities
+        self._policy: Optional[Policy] = None
         
     def add_node(
         self,
@@ -227,6 +375,121 @@ class Agent:
         results = self.kernel.execute(entry_node)
         return [dict(r) for r in results]
     
+    def run(
+        self,
+        entry_node: Optional[str] = None,
+        policy: Optional[Policy] = None,
+    ) -> List[Dict[str, Any]]:
+        """
+        Execute the graph with optional policy enforcement.
+        
+        This is the preferred way to execute with policies.
+        
+        Args:
+            entry_node: Optional starting node.
+            policy: Optional Policy object to enforce during execution.
+                    If not provided, execution is unrestricted.
+        
+        Returns:
+            List of node results with status and output.
+            
+        Example:
+            ```python
+            policy = Policy(
+                allowed_capabilities=[Cap.LLM_CALL],
+                max_tool_calls={"web_search": 0},
+            )
+            results = agent.run("start", policy=policy)
+            ```
+        """
+        if policy is not None:
+            self._policy = policy
+            self.kernel.set_policy(policy.to_rust())
+        
+        return self.execute(entry_node)
+    
+    def set_policy(self, policy: Policy) -> None:
+        """
+        Set the policy for future executions.
+        
+        Args:
+            policy: Policy object defining capability restrictions.
+        """
+        self._policy = policy
+        self.kernel.set_policy(policy.to_rust())
+    
+    def get_policy(self) -> Optional[Policy]:
+        """Get the current policy, if any."""
+        return self._policy
+    
+    def register_tool(
+        self,
+        tool_id: str,
+        handler: Callable[[], Any],
+        required_capabilities: List[int],
+        timeout_ms: Optional[int] = None,
+        priority: int = 0,
+    ) -> str:
+        """
+        Register a tool with required capabilities.
+        
+        This extends add_node by also recording the tool's capability
+        requirements for policy enforcement.
+        
+        Args:
+            tool_id: Unique identifier for the tool.
+            handler: Python callable to execute.
+            required_capabilities: List of Cap flags this tool requires.
+            timeout_ms: Optional timeout in milliseconds.
+            priority: Execution priority.
+            
+        Returns:
+            The tool ID.
+            
+        Example:
+            ```python
+            agent.register_tool(
+                "web_search",
+                lambda: fetch_web_results(),
+                [Cap.NET_ACCESS, Cap.EXTERNAL_API],
+            )
+            ```
+        """
+        # Register as normal node
+        self.add_node(tool_id, handler, timeout_ms, priority)
+        
+        # Track tool capabilities
+        caps = Cap.combine(*required_capabilities)
+        self._tools[tool_id] = caps
+        self.kernel.register_tool(tool_id, caps)
+        
+        return tool_id
+    
+    def check_tool_capability(self, tool_id: str) -> tuple:
+        """
+        Check if a tool can be executed under current policy.
+        
+        Args:
+            tool_id: The tool to check.
+            
+        Returns:
+            Tuple of (allowed: bool, reason: Optional[str])
+        """
+        return self.kernel.check_capability(tool_id)
+    
+    def filter_content(self, content: str) -> tuple:
+        """
+        Filter content through the policy's forbidden patterns.
+        
+        Args:
+            content: The content to filter.
+            
+        Returns:
+            Tuple of (filtered_content, matched_patterns)
+        """
+        return self.kernel.filter_content(content)
+
+    
     def get_audit_log(self) -> List[Dict[str, Any]]:
         """
         Get the execution audit log.
@@ -355,13 +618,15 @@ class Agent:
     
     def clear(self) -> None:
         """
-        Clear the graph and audit log.
+        Clear the graph, audit log, tools, and policy.
         """
         self.kernel.clear_graph()
         self.kernel.clear_audit_log()
         self._handlers.clear()
         self._conditions.clear()
         self._node_handlers.clear()
+        self._tools.clear()
+        self._policy = None
     
     def __repr__(self) -> str:
         return f"Agent(nodes={self.node_count()}, events={self.event_count()}, seed={self.get_seed()})"

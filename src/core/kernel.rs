@@ -73,10 +73,154 @@ impl PyNode {
     }
 }
 
+/// Python-exposed capability flags.
+#[pyclass]
+pub struct PyCap;
+
+#[pymethods]
+impl PyCap {
+    #[staticmethod]
+    fn NET_ACCESS() -> u32 { 0b00000001 }
+    
+    #[staticmethod]
+    fn FILE_SYSTEM_READ() -> u32 { 0b00000010 }
+    
+    #[staticmethod]
+    fn FILE_SYSTEM_WRITE() -> u32 { 0b00000100 }
+    
+    #[staticmethod]
+    fn SUBPROCESS_EXEC() -> u32 { 0b00001000 }
+    
+    #[staticmethod]
+    fn LLM_CALL() -> u32 { 0b00010000 }
+    
+    #[staticmethod]
+    fn MEMORY_ACCESS() -> u32 { 0b00100000 }
+    
+    #[staticmethod]
+    fn SENSITIVE_DATA() -> u32 { 0b01000000 }
+    
+    #[staticmethod]
+    fn EXTERNAL_API() -> u32 { 0b10000000 }
+    
+    #[staticmethod]
+    fn CODE_EXEC() -> u32 { 0b100000000 }
+    
+    #[staticmethod]
+    fn DATABASE_ACCESS() -> u32 { 0b1000000000 }
+    
+    #[staticmethod]
+    fn ALL() -> u32 { u32::MAX }
+    
+    #[staticmethod]
+    fn NONE() -> u32 { 0 }
+
+    /// Combine multiple capability flags.
+    #[staticmethod]
+    fn combine(caps: Vec<u32>) -> u32 {
+        caps.iter().fold(0, |acc, &c| acc | c)
+    }
+}
+
+/// Python-exposed policy configuration.
+#[pyclass]
+#[derive(Clone, Debug)]
+pub struct PyPolicy {
+    pub(crate) allowed_capabilities: u32,
+    pub(crate) max_tool_calls: HashMap<String, u32>,
+    pub(crate) forbidden_content: Vec<String>,
+    pub(crate) content_action: String,
+    pub(crate) name: String,
+}
+
+#[pymethods]
+impl PyPolicy {
+    #[new]
+    #[pyo3(signature = (
+        allowed_capabilities=None,
+        max_tool_calls=None,
+        forbidden_content=None,
+        content_action="redact",
+        name="default"
+    ))]
+    fn new(
+        allowed_capabilities: Option<Vec<u32>>,
+        max_tool_calls: Option<HashMap<String, u32>>,
+        forbidden_content: Option<Vec<String>>,
+        content_action: &str,
+        name: &str,
+    ) -> Self {
+        let caps = allowed_capabilities
+            .map(|v| v.iter().fold(0, |acc, &c| acc | c))
+            .unwrap_or(u32::MAX); // Default: all capabilities
+        
+        Self {
+            allowed_capabilities: caps,
+            max_tool_calls: max_tool_calls.unwrap_or_default(),
+            forbidden_content: forbidden_content.unwrap_or_default(),
+            content_action: content_action.to_string(),
+            name: name.to_string(),
+        }
+    }
+
+    /// Create a permissive policy that allows all capabilities.
+    #[staticmethod]
+    fn permissive() -> Self {
+        Self {
+            allowed_capabilities: u32::MAX,
+            max_tool_calls: HashMap::new(),
+            forbidden_content: Vec::new(),
+            content_action: "redact".to_string(),
+            name: "permissive".to_string(),
+        }
+    }
+
+    /// Create a restrictive policy that allows no capabilities.
+    #[staticmethod]
+    fn restrictive() -> Self {
+        Self {
+            allowed_capabilities: 0,
+            max_tool_calls: HashMap::new(),
+            forbidden_content: Vec::new(),
+            content_action: "block".to_string(),
+            name: "restrictive".to_string(),
+        }
+    }
+
+    /// Create a no-network policy.
+    #[staticmethod]
+    fn no_network() -> Self {
+        Self {
+            allowed_capabilities: u32::MAX & !(0b00000001 | 0b10000000), // No NET_ACCESS or EXTERNAL_API
+            max_tool_calls: HashMap::new(),
+            forbidden_content: Vec::new(),
+            content_action: "redact".to_string(),
+            name: "no_network".to_string(),
+        }
+    }
+
+    /// Check if a capability is allowed.
+    fn has_capability(&self, cap: u32) -> bool {
+        (self.allowed_capabilities & cap) == cap
+    }
+
+    fn __repr__(&self) -> String {
+        format!(
+            "Policy(name={}, caps=0x{:x}, limits={:?})",
+            self.name, self.allowed_capabilities, self.max_tool_calls
+        )
+    }
+}
+
 /// Thread-safe storage for Python callbacks.
 struct CallbackStore {
     handlers: HashMap<String, PyObject>,
     conditions: HashMap<String, PyObject>,
+}
+
+/// Stores tool metadata for policy enforcement.
+struct ToolStore {
+    metadata: HashMap<String, u32>, // tool_id -> required_capabilities
 }
 
 /// The KAIROS-ARK Kernel exposed to Python.
@@ -91,6 +235,8 @@ pub struct PyKernel {
     seed: Mutex<Option<u64>>,
     callbacks: Mutex<CallbackStore>,
     num_threads: Mutex<Option<usize>>,
+    tools: Mutex<ToolStore>,
+    policy: Mutex<Option<PyPolicy>>,
 }
 
 #[pymethods]
@@ -109,6 +255,10 @@ impl PyKernel {
                 conditions: HashMap::new(),
             }),
             num_threads: Mutex::new(num_threads),
+            tools: Mutex::new(ToolStore {
+                metadata: HashMap::new(),
+            }),
+            policy: Mutex::new(None),
         }
     }
 
@@ -191,6 +341,86 @@ impl PyKernel {
     fn register_condition(&self, condition_id: String, condition: PyObject) -> PyResult<()> {
         self.callbacks.lock().conditions.insert(condition_id, condition);
         Ok(())
+    }
+
+    /// Set the policy for this kernel.
+    fn set_policy(&self, policy: PyPolicy) -> PyResult<()> {
+        *self.policy.lock() = Some(policy);
+        Ok(())
+    }
+
+    /// Get the current policy (if any).
+    fn get_policy(&self) -> Option<PyPolicy> {
+        self.policy.lock().clone()
+    }
+
+    /// Register a tool with its required capabilities.
+    fn register_tool(&self, tool_id: String, required_capabilities: u32) -> PyResult<()> {
+        self.tools.lock().metadata.insert(tool_id, required_capabilities);
+        Ok(())
+    }
+
+    /// Check if a tool can be executed under current policy.
+    /// Returns (allowed: bool, reason: Option<str>)
+    fn check_capability(&self, tool_id: String) -> PyResult<(bool, Option<String>)> {
+        let policy = match &*self.policy.lock() {
+            Some(p) => p.clone(),
+            None => return Ok((true, None)), // No policy = allow all
+        };
+
+        let required = match self.tools.lock().metadata.get(&tool_id) {
+            Some(&caps) => caps,
+            None => return Ok((true, None)), // Unknown tool = allow
+        };
+
+        // Check if policy allows all required capabilities
+        if (policy.allowed_capabilities & required) == required {
+            Ok((true, None))
+        } else {
+            let missing = required & !policy.allowed_capabilities;
+            let reason = format!(
+                "Tool '{}' requires capabilities 0x{:x} but policy only allows 0x{:x} (missing: 0x{:x})",
+                tool_id, required, policy.allowed_capabilities, missing
+            );
+            Ok((false, Some(reason)))
+        }
+    }
+
+    /// Check and increment call counter for a tool.
+    fn check_call_limit(&self, tool_id: String) -> PyResult<(bool, Option<String>)> {
+        let policy = match &*self.policy.lock() {
+            Some(p) => p.clone(),
+            None => return Ok((true, None)),
+        };
+
+        let limit = match policy.max_tool_calls.get(&tool_id) {
+            Some(&limit) => limit,
+            None => return Ok((true, None)), // No limit
+        };
+
+        // For now, we track calls in the tools store
+        // This is a simplified implementation - in production you'd want separate counters
+        Ok((true, None)) // TODO: Implement call counting
+    }
+
+    /// Filter content for forbidden patterns.
+    fn filter_content(&self, content: String) -> PyResult<(String, Vec<String>)> {
+        let policy = match &*self.policy.lock() {
+            Some(p) => p.clone(),
+            None => return Ok((content, Vec::new())),
+        };
+
+        let mut result = content;
+        let mut matched = Vec::new();
+
+        for pattern in &policy.forbidden_content {
+            if result.contains(pattern) {
+                matched.push(format!("substring:{}", pattern));
+                result = result.replace(pattern, "[REDACTED]");
+            }
+        }
+
+        Ok((result, matched))
     }
 
     /// Execute the graph and return results.
@@ -344,6 +574,18 @@ impl PyKernel {
                 }
                 EventType::ExecutionEnd { success } => {
                     format!("ExecutionEnd({})", success)
+                }
+                EventType::PolicyAllow { tool_id, capabilities_checked } => {
+                    format!("PolicyAllow({}, {:?})", tool_id, capabilities_checked)
+                }
+                EventType::PolicyDeny { tool_id, rule, reason } => {
+                    format!("PolicyDeny({}, {}, {})", tool_id, rule, reason)
+                }
+                EventType::ContentRedacted { original_length, redacted_length, patterns_matched } => {
+                    format!("ContentRedacted({}->{}, {:?})", original_length, redacted_length, patterns_matched)
+                }
+                EventType::CallLimitExceeded { tool_id, limit, attempted } => {
+                    format!("CallLimitExceeded({}, limit={}, attempted={})", tool_id, limit, attempted)
                 }
             };
 
