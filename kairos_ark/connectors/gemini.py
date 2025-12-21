@@ -10,7 +10,7 @@ except ImportError:
 class ArkGeminiConnector(ArkBaseConnector):
     """Connector for Google Gemini models via google-generativeai."""
     
-    def __init__(self, model_name="gemini-2.0-flash-lite", api_key=None, agent=None):
+    def __init__(self, model_name="gemini-2.0-flash-lite", embedding_model="models/text-embedding-004", api_key=None, agent=None):
         super().__init__(agent=agent)
         if not HAS_GEMINI:
             raise ImportError("ArkGeminiConnector requires 'google-generativeai'. Install via pip.")
@@ -21,6 +21,7 @@ class ArkGeminiConnector(ArkBaseConnector):
             
         genai.configure(api_key=self.api_key)
         self.model = genai.GenerativeModel(model_name)
+        self.embedding_model = embedding_model
         
     def generate(self, prompt: str) -> str:
         self._enforce_policy()
@@ -30,7 +31,7 @@ class ArkGeminiConnector(ArkBaseConnector):
     def embed(self, text: str):
         self._enforce_policy()
         result = genai.embed_content(
-            model="models/text-embedding-004",
+            model=self.embedding_model,
             content=text,
             task_type="retrieval_document"
         )
