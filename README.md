@@ -345,6 +345,41 @@ plugins = agent.kernel.list_plugins()
 
 ---
 
+## Phase 5: Universal Interoperability
+
+Framework adapters for LangGraph, CrewAI, and MCP support.
+
+### State Store (LangGraph Integration)
+
+```python
+# High-performance state management (~4µs vs ~14ms Python dict)
+agent.kernel.state_set('messages', json.dumps(['Hello']))
+value = agent.kernel.state_get('messages')
+
+# Checkpointing for recovery
+agent.kernel.state_checkpoint('cp1')
+agent.kernel.state_restore('cp1')
+
+# All state keys
+keys = agent.kernel.state_keys()
+version = agent.kernel.state_version()
+```
+
+### MCP Tool Support
+
+```python
+# Register MCP-compatible tool
+agent.kernel.mcp_register_tool('web_search', 'Search the web')
+
+# Invoke tool
+result = agent.kernel.mcp_call_tool('web_search', '{"query": "KAIROS"}')
+
+# List all MCP tools
+tools = agent.kernel.mcp_list_tools()
+```
+
+---
+
 ## Phase 6: Governance & HITL
 
 Human-in-the-Loop approval nodes and audit verification.
