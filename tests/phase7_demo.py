@@ -68,7 +68,8 @@ def test_phase7_verification():
         ArkDeepSeekConnector, 
         ArkClaudeConnector,
         ArkOllamaConnector,
-        ArkMistralConnector
+        ArkMistralConnector,
+        ArkCohereConnector
     )
     
     connectors = [
@@ -77,7 +78,8 @@ def test_phase7_verification():
         ("DeepSeek", ArkDeepSeekConnector),
         ("Claude", ArkClaudeConnector),
         ("Ollama", ArkOllamaConnector),
-        ("Mistral", ArkMistralConnector)
+        ("Mistral", ArkMistralConnector),
+        ("Cohere", ArkCohereConnector)
     ]
     
     for name, cls in connectors:

@@ -155,11 +155,15 @@ from kairos_ark.connectors import (
     ArkGeminiConnector,
     ArkOpenAIConnector,
     ArkClaudeConnector,
-    ArkOllamaConnector
+    ArkOllamaConnector,
+    ArkCohereConnector
 )
 
 # Gemini (Google)
 llm = ArkGeminiConnector(model_name="gemini-2.0-flash-lite")
+
+# Cohere (Enterprise)
+cohere = ArkCohereConnector(model="command-r-plus")
 
 # OpenAI / Groq / DeepSeek
 groq = ArkOpenAIConnector(
