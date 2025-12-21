@@ -20,7 +20,7 @@ def main():
     # 2. Initialize Connector
     # -----------------------
     try:
-        connector = ArkAIConnector(model_name="gemini-2.0-flash", api_key=api_key)
+        connector = ArkAIConnector(model_name="gemini-2.0-flash-lite", api_key=api_key)
         print("Connector initialized.")
         
         # 3. Generate Content

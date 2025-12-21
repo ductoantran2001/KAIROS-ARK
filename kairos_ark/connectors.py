@@ -8,7 +8,7 @@ except ImportError:
 class ArkAIConnector:
     """Unified connector for ARK's native state store and Gemini models."""
     
-    def __init__(self, model_name="gemini-2.0-flash", api_key=None):
+    def __init__(self, model_name="gemini-2.0-flash-lite", api_key=None):
         if not HAS_GEMINI:
             raise ImportError("ArkAIConnector requires 'google-generativeai' package. Install it via pip.")
         
