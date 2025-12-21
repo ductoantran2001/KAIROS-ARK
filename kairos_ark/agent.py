@@ -12,6 +12,7 @@ The Agent class provides a user-friendly interface for:
 from typing import Any, Callable, Dict, List, Optional, Union
 import json
 import time
+import concurrent.futures
 
 
 class Cap:
@@ -339,8 +340,8 @@ class Agent:
         """
         Execute multiple nodes in parallel.
         
-        This is a convenience method that creates a temporary fork/join
-        structure and executes it.
+        This uses a ThreadPoolExecutor to guarantee parallelism regardless of 
+        the underlying kernel's configuration.
         
         Args:
             nodes: List of node IDs to execute in parallel.
@@ -348,16 +349,26 @@ class Agent:
         Returns:
             List of results from each node.
         """
-        # Create temporary fork/join
-        fork_id = "_parallel_fork"
-        join_id = "_parallel_join"
+        # Execute independant nodes in parallel threads
+        results = [None] * len(nodes)
         
-        self.add_fork(fork_id, nodes)
-        self.add_join(join_id, nodes)
-        self.connect(fork_id, join_id)
-        
-        # Execute
-        results = self.execute(fork_id)
+        def run_node(idx, node_id):
+            # We treat each node as an isolated entry point
+            # This is valid for 'fan-out' of independent tools
+            # Note: This bypasses complicated graph dependencies for speed
+            node_res = self.execute(node_id)
+            # Flatten result if typically single item list
+            return node_res[0] if node_res else None
+
+        with concurrent.futures.ThreadPoolExecutor() as executor:
+            futures = {executor.submit(run_node, i, nid): i for i, nid in enumerate(nodes)}
+            
+            for future in concurrent.futures.as_completed(futures):
+                idx = futures[future]
+                try:
+                    results[idx] = future.result()
+                except Exception as e:
+                    results[idx] = {"error": str(e), "status": "failed"}
         
         return results
     
