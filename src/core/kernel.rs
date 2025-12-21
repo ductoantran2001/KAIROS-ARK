@@ -916,6 +916,99 @@ impl PyKernel {
         Ok(py_list)
     }
 
+    // ===== Phase 5: State Store (LangGraph Integration) =====
+
+    /// Set a value in the global state store.
+    fn state_set(&self, key: String, value: String) -> PyResult<()> {
+        use crate::adapters::global_state_store;
+        global_state_store().set_string(key, value);
+        Ok(())
+    }
+
+    /// Get a value from the global state store.
+    fn state_get(&self, key: String) -> PyResult<Option<String>> {
+        use crate::adapters::global_state_store;
+        Ok(global_state_store().get_string(&key))
+    }
+
+    /// Create a state checkpoint.
+    fn state_checkpoint(&self, id: String) -> PyResult<()> {
+        use crate::adapters::global_state_store;
+        global_state_store().checkpoint(id);
+        Ok(())
+    }
+
+    /// Restore from a state checkpoint.
+    fn state_restore(&self, id: String) -> PyResult<bool> {
+        use crate::adapters::global_state_store;
+        Ok(global_state_store().restore(&id))
+    }
+
+    /// Get all state keys.
+    fn state_keys<'py>(&self, py: Python<'py>) -> PyResult<&'py PyList> {
+        use crate::adapters::global_state_store;
+        let keys = global_state_store().keys();
+        Ok(PyList::new(py, keys))
+    }
+
+    /// Get state version.
+    fn state_version(&self) -> u64 {
+        use crate::adapters::global_state_store;
+        global_state_store().version()
+    }
+
+    // ===== Phase 5: MCP Support =====
+
+    /// Register an MCP tool.
+    fn mcp_register_tool(&self, name: String, description: String) -> PyResult<()> {
+        use crate::adapters::mcp::{global_mcp_server, McpToolInfo, McpResult};
+        
+        let server = global_mcp_server();
+        let info = McpToolInfo::new(&name, description);
+        
+        let name_clone = name.clone();
+        server.register(info, move |args| {
+            McpResult::ok(serde_json::json!({
+                "tool": name_clone,
+                "args": args,
+                "status": "mock_response"
+            }))
+        });
+        
+        Ok(())
+    }
+
+    /// List MCP tools.
+    fn mcp_list_tools<'py>(&self, py: Python<'py>) -> PyResult<&'py PyList> {
+        use crate::adapters::mcp::global_mcp_server;
+        
+        let tools = global_mcp_server().list_tools();
+        let py_list = PyList::empty(py);
+        
+        for tool in tools {
+            let dict = PyDict::new(py);
+            dict.set_item("name", &tool.name)?;
+            dict.set_item("description", &tool.description)?;
+            dict.set_item("capabilities", tool.capabilities)?;
+            py_list.append(dict)?;
+        }
+        
+        Ok(py_list)
+    }
+
+    /// Call an MCP tool.
+    fn mcp_call_tool(&self, name: String, args: String) -> PyResult<String> {
+        use crate::adapters::mcp::global_mcp_server;
+        
+        let args_value: serde_json::Value = serde_json::from_str(&args)
+            .map_err(|e| PyRuntimeError::new_err(format!("Invalid JSON: {}", e)))?;
+        
+        let result = global_mcp_server().call_tool(&name, args_value);
+        
+        serde_json::to_string(&result)
+            .map_err(|e| PyRuntimeError::new_err(format!("Serialization error: {}", e)))
+    }
+
     fn __repr__(&self) -> String {
         format!(
             "PyKernel(nodes={}, events={}, seed={:?})",
