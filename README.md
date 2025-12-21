@@ -2,6 +2,8 @@
 
 <div align="center">
 
+![KAIROS-ARK Logo](assets/logo.jpg)
+
 **The Operating System for Agentic AI**
 
 [![Rust](https://img.shields.io/badge/rust-1.70+-orange.svg)](https://www.rust-lang.org/)
@@ -139,18 +141,33 @@ handle = agent.kernel.write_shared(large_data_list)
 result = agent.kernel.read_shared(handle)
 ```
 
-### 🤝 Interoperability & MCP
+### 🤝 Interoperability & Ecosystem
 
-KAIROS-ARK acts as a native backend for other frameworks.
+KAIROS-ARK acts as a native backend for other frameworks, with built-in adapters.
 
 ```python
-# LangGraph-compatible State Store (~4µs access)
-agent.kernel.state_set("messages", json.dumps(history))
-msgs = agent.kernel.state_get("messages")
+# 1. LangGraph Adapter (Native Checkpointer)
+from kairos_ark.integrations.langgraph import ArkNativeCheckpointer
+checkpointer = ArkNativeCheckpointer(agent)
 
-# Model Context Protocol (MCP) Support
+# 2. Gemini Connector
+from kairos_ark.connectors import ArkAIConnector
+llm = ArkAIConnector(model_name="gemini-2.0-flash")
+response = llm.generate("Hello ARK")
+
+# 3. Native Tools (Zero-Copy Ready)
+from kairos_ark.tools import ArkTools
+results = ArkTools.tavily_search("KAIROS-ARK Architecture")
+```
+
+#### Kernel-Level Support
+
+```python
+# State Store (~4µs access)
+agent.kernel.state_set("messages", json.dumps(history))
+
+# MCP Tool Registry
 agent.kernel.mcp_register_tool("search", "Search tool")
-result = agent.kernel.mcp_call_tool("search", '{"query": "KAIROS"}')
 ```
 
 ### ⚖️ Governance & HITL
