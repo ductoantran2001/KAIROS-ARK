@@ -105,32 +105,71 @@ print(f"Execution Time: {exec_time:.4f}s")
 print(f"Throughput: {count / exec_time:.2f} nodes/sec")
 
 
-print("\n### 5.2 Zero-Copy Shared Memory")
-# Demonstrating efficient large data handling
+print("\n### 5.2 Zero-Copy Shared Memory (Advanced)")
 import os
 
-# Create 50MB of dummy data (Default kernel limit is 64MB)
+# 1. Stats Check
+print("Initial Stats:", agent.get_shared_stats())
+
+# 2. Basic Allocation
 data_size = 50 * 1024 * 1024 # 50 MB
 print(f"Allocating {data_size / 1024 / 1024} MB of data...")
 large_data = b"x" * data_size
 
 start_write = time.time()
-# Write to kernel shared memory
-# Note: write_shared expects bytes
-handle_id = agent.kernel.write_shared(large_data)
+handle_id = agent.write_shared(large_data)
 write_time = time.time() - start_write
 print(f"Write Time: {write_time:.6f}s (Handle ID: {handle_id})")
 
-# Define a node that reads this handle (simulating strict zero-copy access)
-# In a real scenario, this would be passed to another process/thread/node
-def process_large_data():
-    return {"status": "read_complete", "handle": handle_id}
+# 3. Read Verification
+start_read = time.time()
+read_data = agent.read_shared(handle_id)
+read_time = time.time() - start_read
+print(f"Read Time:  {read_time:.6f}s")
+assert len(read_data) == data_size
+assert read_data == large_data
+print("✅ Data Integrity Verified")
 
-agent.add_node("process_large", process_large_data)
-res = agent.execute("process_large")
-print("Read Result:", res[0]["output"])
+# 4. Stats Check
+stats = agent.get_shared_stats()
+print("Stats after alloc:", stats)
+assert stats["active_handles"] == 1
+assert stats["bytes_live"] == data_size
 
-# Verify clearing shared memory via main agent.clear()
-print("Clearing agent (including shared memory)...")
+# 5. Manual Free
+print("Freeing memory...")
+agent.free_shared(handle_id)
+stats = agent.get_shared_stats()
+print("Stats after free:", stats)
+assert stats["active_handles"] == 0
+assert stats["bytes_live"] == 0
+
+# 6. Safety Checks (Double Free / Stale Handle)
+print("Testing Safety (Double Free)...")
+try:
+    agent.read_shared(handle_id)
+    print("❌ ERROR: Read on freed handle should have failed!")
+except Exception as e:
+    print(f"✅ Correctly caught stale read: {e}")
+
+try:
+    agent.free_shared(handle_id)
+    print("❌ ERROR: Double free should have failed!")
+except Exception as e:
+    print(f"✅ Correctly caught double free: {e}")
+
+# 7. Context Manager
+print("Testing Context Manager...")
+with agent.shared_buffer(b"temporary_data") as h:
+    print(f"Inside context: {agent.get_shared_stats()}")
+    data = agent.read_shared(h)
+    assert data == b"temporary_data"
+
+print(f"Outside context: {agent.get_shared_stats()}")
+assert agent.get_shared_stats()["active_handles"] == 0
+print("✅ Context Manager Verified")
+
+# 8. Reset
+print("Clearing agent...")
 agent.clear()
-print("Agent cleared.")
+

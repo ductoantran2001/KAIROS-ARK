@@ -6,7 +6,6 @@
 use parking_lot::Mutex;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
-use std::collections::VecDeque;
 use crate::core::types::NodeId;
 
 /// Types of events that can be recorded in the audit ledger.
@@ -248,35 +247,29 @@ impl Event {
     }
 }
 
-/// Thread-safe append-only audit ledger with ring-buffer capacity.
+/// Thread-safe append-only audit ledger.
 /// 
-/// Uses a mutex-guarded VecDeque. If capacity is set, older events are dropped.
+/// Uses a mutex-guarded vector for thread-safe event logging.
+/// For extremely high-frequency scenarios, consider using crossbeam's
+/// lock-free structures.
 #[derive(Debug)]
 pub struct AuditLedger {
-    events: Mutex<VecDeque<Event>>,
-    capacity: usize,
+    events: Mutex<Vec<Event>>,
 }
 
 impl AuditLedger {
-    /// Create a new empty audit ledger with default unlimited capacity (0).
+    /// Create a new empty audit ledger.
     pub fn new() -> Self {
         Self {
-            events: Mutex::new(VecDeque::with_capacity(1024)),
-            capacity: 0, // 0 means unlimited
+            events: Mutex::new(Vec::with_capacity(1024)),
         }
     }
 
-    /// Create a new ledger with a specific initial capacity and limit.
+    /// Create a new ledger with a specific initial capacity.
     pub fn with_capacity(capacity: usize) -> Self {
         Self {
-            events: Mutex::new(VecDeque::with_capacity(capacity)),
-            capacity,
+            events: Mutex::new(Vec::with_capacity(capacity)),
         }
-    }
-
-    /// Set the maximum capacity. 0 means unlimited.
-    pub fn set_capacity(&mut self, capacity: usize) {
-        self.capacity = capacity;
     }
 
     /// Append an event to the ledger.
@@ -284,11 +277,7 @@ impl AuditLedger {
     /// This operation is thread-safe and will not block other readers.
     #[inline]
     pub fn append(&self, event: Event) {
-        let mut events = self.events.lock();
-        if self.capacity > 0 && events.len() >= self.capacity {
-            events.pop_front();
-        }
-        events.push_back(event);
+        self.events.lock().push(event);
     }
 
     /// Log a start event for a node.
@@ -345,9 +334,9 @@ impl AuditLedger {
 
     /// Get a snapshot of all events.
     /// 
-    /// Returns a vector copy of the event log.
+    /// Returns a cloned copy of the event log.
     pub fn get_events(&self) -> Vec<Event> {
-        self.events.lock().iter().cloned().collect()
+        self.events.lock().clone()
     }
 
     /// Get events sorted by logical timestamp.
@@ -381,11 +370,7 @@ impl AuditLedger {
     pub fn from_json(json: &str) -> Result<Self, serde_json::Error> {
         let events: Vec<Event> = serde_json::from_str(json)?;
         let ledger = Self::new();
-        let mut deque = VecDeque::new();
-        for e in events {
-            deque.push_back(e);
-        }
-        *ledger.events.lock() = deque;
+        *ledger.events.lock() = events;
         Ok(ledger)
     }
 }
@@ -398,9 +383,8 @@ impl Default for AuditLedger {
 
 impl Clone for AuditLedger {
     fn clone(&self) -> Self {
-        let mut ledger = Self::new();
-        *ledger.events.lock() = self.events.lock().clone();
-        ledger.capacity = self.capacity;
+        let ledger = Self::new();
+        *ledger.events.lock() = self.get_events();
         ledger
     }
 }
@@ -445,19 +429,6 @@ mod tests {
         }
 
         assert_eq!(ledger.len(), 1000);
-    }
-
-    #[test]
-    fn test_capacity_limit() {
-        let ledger = AuditLedger::with_capacity(2);
-        ledger.log_start(1, "a");
-        ledger.log_start(2, "b");
-        ledger.log_start(3, "c");
-        
-        let events = ledger.get_events();
-        assert_eq!(events.len(), 2);
-        assert_eq!(events[0].node_id, "b"); // "a" should be dropped
-        assert_eq!(events[1].node_id, "c");
     }
 
     #[test]

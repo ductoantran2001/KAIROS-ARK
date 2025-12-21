@@ -4,7 +4,7 @@ build-backend = "maturin"
 
 [project]
 name = "kairos_ark"
-version = "0.1.0"
+version = "0.1.8"
 description = "KAIROS-ARK: A deterministic multi-threaded scheduler for agentic AI workflows"
 readme = "README.md"
 license = { text = "MIT" }

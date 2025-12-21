@@ -219,9 +219,26 @@ struct CallbackStore {
     conditions: HashMap<String, PyObject>,
 }
 
+impl CallbackStore {
+    fn new() -> Self {
+        Self {
+            handlers: HashMap::new(),
+            conditions: HashMap::new(),
+        }
+    }
+}
+
 /// Stores tool metadata for policy enforcement.
 struct ToolStore {
     metadata: HashMap<String, u32>, // tool_id -> required_capabilities
+}
+
+impl ToolStore {
+    fn new() -> Self {
+        Self {
+            metadata: HashMap::new(),
+        }
+    }
 }
 
 /// The KAIROS-ARK Kernel exposed to Python.
@@ -238,49 +255,63 @@ pub struct PyKernel {
     num_threads: Mutex<Option<usize>>,
     tools: Mutex<ToolStore>,
     policy: Mutex<Option<PyPolicy>>,
+    max_memory_bytes: Option<usize>,
 }
 
 #[pymethods]
 impl PyKernel {
     /// Create a new kernel instance.
     #[new]
-    #[pyo3(signature = (seed=None, num_threads=None))]
-    fn new(seed: Option<u64>, num_threads: Option<usize>) -> Self {
+    #[pyo3(signature = (seed=None, num_threads=None, max_memory_bytes=None))]
+    fn new(seed: Option<u64>, num_threads: Option<usize>, max_memory_bytes: Option<usize>) -> Self {
         Self {
             graph: Mutex::new(Graph::new()),
             ledger: Arc::new(AuditLedger::new()),
             clock: Arc::new(LogicalClock::new()),
             seed: Mutex::new(seed),
-            callbacks: Mutex::new(CallbackStore {
-                handlers: HashMap::new(),
-                conditions: HashMap::new(),
-            }),
+            callbacks: Mutex::new(CallbackStore::new()),
             num_threads: Mutex::new(num_threads),
-            tools: Mutex::new(ToolStore {
-                metadata: HashMap::new(),
-            }),
+            tools: Mutex::new(ToolStore::new()),
             policy: Mutex::new(None),
+            max_memory_bytes,
         }
     }
 
     /// Add a task node to the graph.
-    #[pyo3(signature = (node_id, handler_id, priority=0, timeout_ms=None))]
+    #[pyo3(signature = (node_id, handler, priority=0, timeout_ms=None))]
     fn add_task(
         &self,
         node_id: String,
-        handler_id: String,
+        handler: String,
         priority: i32,
         timeout_ms: Option<u64>,
-    ) -> PyResult<()> {
-        let mut node = Node::task(&node_id, &handler_id)
+    ) -> PyResult<String> {
+        use pyo3::exceptions::PyRuntimeError;
+        let mut graph = self.graph.lock();
+        
+        // Check memory limit
+        if let Some(max) = self.max_memory_bytes {
+            // Rough estimation: Slab size + approx heap per node (512 bytes conservative average)
+            let estimated_size = graph.len() * (std::mem::size_of::<crate::core::graph::Node>() + 512);
+            if estimated_size >= max {
+                 return Err(PyRuntimeError::new_err(format!(
+                     "Memory limit exceeded: used ~{} bytes, limit {} bytes", 
+                     estimated_size, max
+                 )));
+            }
+        }
+        
+        let mut node = Node::task(node_id.clone(), &handler)
             .with_priority(priority);
         
         if let Some(timeout) = timeout_ms {
             node = node.with_timeout(timeout);
         }
 
-        self.graph.lock().add_node(node);
-        Ok(())
+        // Use the already locked graph instance
+        // self.graph.lock().add_node(node); // Double lock would deadlock!
+        graph.add_node(node);
+        Ok(node_id)
     }
 
     /// Add a branch node to the graph.
@@ -855,34 +886,48 @@ impl PyKernel {
     // ===== Phase 4: Shared Memory =====
 
     /// Write data to shared memory pool, return handle ID.
+    /// Write data to shared memory pool, return handle ID.
     fn write_shared(&self, data: Vec<u8>) -> PyResult<u64> {
         use crate::core::shared_memory::global_store;
         
-        match global_store().write(&data) {
-            Some(handle) => Ok(handle.id),
-            None => Err(PyRuntimeError::new_err("Failed to allocate shared memory")),
-        }
+        global_store().write(&data)
+            .map_err(|e| PyRuntimeError::new_err(format!("Shared Memory Error: {}", e)))
     }
 
+    /// Read data from shared memory by handle ID.
     /// Read data from shared memory by handle ID.
     fn read_shared(&self, handle_id: u64) -> PyResult<Vec<u8>> {
         use crate::core::shared_memory::global_store;
         
         global_store()
-            .read_by_id(handle_id)
-            .ok_or_else(|| PyRuntimeError::new_err("Handle not found or invalid"))
+            .read(handle_id)
+            .map_err(|e| PyRuntimeError::new_err(format!("Shared Memory Error: {}", e)))
     }
 
+    /// Free a shared memory allocation.
+    fn free_shared(&self, handle_id: u64) -> PyResult<bool> {
+        use crate::core::shared_memory::global_store;
+        
+        global_store()
+            .free(handle_id)
+            .map_err(|e| PyRuntimeError::new_err(format!("Shared Memory Error: {}", e)))
+    }
+
+    /// Get shared memory pool stats.
     /// Get shared memory pool stats.
     fn shared_memory_stats<'py>(&self, py: Python<'py>) -> PyResult<PyObject> {
         use crate::core::shared_memory::global_store;
         
-        let store = global_store();
+        let stats = global_store().stats();
         let dict = PyDict::new(py);
-        dict.set_item("capacity", store.capacity())?;
-        dict.set_item("used", store.used())?;
-        dict.set_item("available", store.available())?;
-        dict.set_item("allocations", store.allocation_count())?;
+        
+        dict.set_item("active_handles", stats.active_handles)?;
+        dict.set_item("bytes_live", stats.bytes_live)?;
+        dict.set_item("peak_bytes", stats.peak_bytes)?;
+        dict.set_item("alloc_count", stats.alloc_count)?;
+        dict.set_item("free_count", stats.free_count)?;
+        dict.set_item("errors", stats.errors)?;
+        
         Ok(dict.into())
     }
 

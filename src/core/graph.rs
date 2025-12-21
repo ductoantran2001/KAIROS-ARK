@@ -5,6 +5,7 @@
 
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use slab::Slab;
 use crate::core::types::NodeId;
 
 /// Type of node in the execution graph.
@@ -43,8 +44,11 @@ pub enum NodeType {
 /// A node in the execution graph.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Node {
-    /// Unique identifier for this node
+    /// Unique identifier for this node (String for API, but internally often indexed)
     pub id: NodeId,
+    /// Internal Arena Index (Optional, populated when added to graph)
+    #[serde(skip)]
+    pub index: Option<usize>,
     /// Type and configuration of this node
     pub node_type: NodeType,
     /// Outgoing edges to successor nodes
@@ -62,6 +66,7 @@ impl Node {
     pub fn task(id: impl Into<NodeId>, handler: impl Into<String>) -> Self {
         Self {
             id: id.into(),
+            index: None,
             node_type: NodeType::Task { handler: handler.into() },
             edges: Vec::new(),
             timeout_ms: None,
@@ -79,6 +84,7 @@ impl Node {
     ) -> Self {
         Self {
             id: id.into(),
+            index: None,
             node_type: NodeType::Branch {
                 condition: condition.into(),
                 true_branch: true_branch.into(),
@@ -95,6 +101,7 @@ impl Node {
     pub fn fork(id: impl Into<NodeId>, children: Vec<NodeId>) -> Self {
         Self {
             id: id.into(),
+            index: None,
             node_type: NodeType::Fork { children: children.clone() },
             edges: children,
             timeout_ms: None,
@@ -107,6 +114,7 @@ impl Node {
     pub fn join(id: impl Into<NodeId>, required_parents: Vec<NodeId>) -> Self {
         Self {
             id: id.into(),
+            index: None,
             node_type: NodeType::Join { required_parents },
             edges: Vec::new(),
             timeout_ms: None,
@@ -140,27 +148,103 @@ impl Node {
     }
 }
 
-/// The execution graph containing all nodes.
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+/// The execution graph using Slab allocation for nodes.
+#[derive(Debug, Clone, Default)]
 pub struct Graph {
-    /// All nodes in the graph, keyed by their ID
-    nodes: HashMap<NodeId, Node>,
+    /// Arena for node storage (O(1) access by index, cache friendly)
+    nodes: Slab<Node>,
+    /// Map from NodeId (String) to Slab Index (usize)
+    node_map: HashMap<NodeId, usize>,
     /// Entry point node ID
     entry: Option<NodeId>,
+}
+
+// Manual Serialize/Deserialize because Slab doesn't support it directly in the way we want
+// We want to serialize as a list of nodes to maintain compatibility
+impl Serialize for Graph {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        use serde::ser::SerializeStruct;
+        let mut state = serializer.serialize_struct("Graph", 2)?;
+        // Collect nodes as a map
+        let nodes_map: HashMap<&NodeId, &Node> = self.nodes.iter()
+            .map(|(_, node)| (&node.id, node))
+            .collect();
+        state.serialize_field("nodes", &nodes_map)?;
+        state.serialize_field("entry", &self.entry)?;
+        state.end()
+    }
+}
+
+// For deserialization, we rebuild the Slab
+impl<'de> Deserialize<'de> for Graph {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        #[derive(Deserialize)]
+        struct GraphData {
+            nodes: HashMap<NodeId, Node>,
+            entry: Option<NodeId>,
+        }
+
+        let data = GraphData::deserialize(deserializer)?;
+        let mut graph = Graph::new();
+        graph.entry = data.entry;
+        
+        for (_, node) in data.nodes {
+            graph.add_node(node);
+        }
+        
+        Ok(graph)
+    }
 }
 
 impl Graph {
     /// Create a new empty graph.
     pub fn new() -> Self {
         Self {
-            nodes: HashMap::new(),
+            nodes: Slab::new(),
+            node_map: HashMap::new(),
             entry: None,
         }
     }
 
-    /// Add a node to the graph.
-    pub fn add_node(&mut self, node: Node) {
-        self.nodes.insert(node.id.clone(), node);
+    /// Create a new graph with specified capacity to avoid allocations.
+    pub fn with_capacity(capacity: usize) -> Self {
+        Self {
+            nodes: Slab::with_capacity(capacity),
+            node_map: HashMap::with_capacity(capacity),
+            entry: None,
+        }
+    }
+
+    /// Add a node to the graph using arena allocation.
+    pub fn add_node(&mut self, mut node: Node) -> usize {
+        // If node already exists, update it (remove old index first to keep map clean)
+        if let Some(&idx) = self.node_map.get(&node.id) {
+            // Update in place
+            if self.nodes.contains(idx) {
+                // Keep the index same, just overwrite content
+                self.nodes[idx] = node;
+                // Note: node.index isn't updated here because we moved `node` into slab
+                // But we should set it for correctness if retrieved back
+                self.nodes[idx].index = Some(idx);
+                return idx;
+            }
+        }
+        
+        let id_clone = node.id.clone();
+        let entry = self.nodes.vacant_entry();
+        let idx = entry.key();
+        
+        node.index = Some(idx);
+        entry.insert(node);
+        
+        self.node_map.insert(id_clone, idx);
+        idx
     }
 
     /// Set the entry point for graph execution.
@@ -175,27 +259,36 @@ impl Graph {
 
     /// Get a node by ID.
     pub fn get(&self, id: &NodeId) -> Option<&Node> {
-        self.nodes.get(id)
+        self.node_map.get(id).and_then(|&idx| self.nodes.get(idx))
     }
 
     /// Get a mutable reference to a node by ID.
     pub fn get_mut(&mut self, id: &NodeId) -> Option<&mut Node> {
-        self.nodes.get_mut(id)
+        if let Some(&idx) = self.node_map.get(id) {
+            self.nodes.get_mut(idx)
+        } else {
+            None
+        }
+    }
+
+    /// Get a node by its Slab index (O(1)).
+    pub fn get_by_index(&self, index: usize) -> Option<&Node> {
+        self.nodes.get(index)
     }
 
     /// Check if a node exists.
     pub fn contains(&self, id: &NodeId) -> bool {
-        self.nodes.contains_key(id)
+        self.node_map.contains_key(id)
     }
 
     /// Get all node IDs.
     pub fn node_ids(&self) -> impl Iterator<Item = &NodeId> {
-        self.nodes.keys()
+        self.node_map.keys()
     }
 
     /// Get all nodes.
     pub fn nodes(&self) -> impl Iterator<Item = &Node> {
-        self.nodes.values()
+        self.nodes.iter().map(|(_, node)| node)
     }
 
     /// Get the number of nodes.
@@ -210,27 +303,28 @@ impl Graph {
 
     /// Add an edge between two existing nodes.
     pub fn add_edge(&mut self, from: &NodeId, to: impl Into<NodeId>) -> bool {
-        if let Some(node) = self.nodes.get_mut(from) {
-            node.edges.push(to.into());
-            true
-        } else {
-            false
+        if let Some(&idx) = self.node_map.get(from) {
+            if let Some(node) = self.nodes.get_mut(idx) {
+                node.edges.push(to.into());
+                return true;
+            }
         }
+        false
     }
 
     /// Get successor nodes of a given node.
     pub fn successors(&self, id: &NodeId) -> Option<Vec<&Node>> {
-        self.nodes.get(id).map(|node| {
+        self.get(id).map(|node| {
             node.edges
                 .iter()
-                .filter_map(|edge_id| self.nodes.get(edge_id))
+                .filter_map(|edge_id| self.get(edge_id))
                 .collect()
         })
     }
 
     /// Get nodes sorted by priority (highest first).
     pub fn nodes_by_priority(&self) -> Vec<&Node> {
-        let mut nodes: Vec<_> = self.nodes.values().collect();
+        let mut nodes: Vec<_> = self.nodes.iter().map(|(_, n)| n).collect();
         nodes.sort_by(|a, b| b.priority.cmp(&a.priority));
         nodes
     }
@@ -300,5 +394,18 @@ mod tests {
         assert_eq!(by_priority[0].id, "c");
         assert_eq!(by_priority[1].id, "b");
         assert_eq!(by_priority[2].id, "a");
+    }
+    
+    #[test]
+    fn test_slab_indices() {
+        let mut graph = Graph::new();
+        let idx_a = graph.add_node(Node::task("a", "h"));
+        let idx_b = graph.add_node(Node::task("b", "h"));
+        
+        assert_eq!(graph.get_by_index(idx_a).unwrap().id, "a");
+        assert_eq!(graph.get_by_index(idx_b).unwrap().id, "b");
+        
+        // Ensure map lookup works
+        assert_eq!(graph.get(&"a".into()).unwrap().index, Some(idx_a));
     }
 }

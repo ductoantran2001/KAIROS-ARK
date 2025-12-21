@@ -13,6 +13,7 @@ from typing import Any, Callable, Dict, List, Optional, Union
 import json
 import time
 import concurrent.futures
+from contextlib import contextmanager
 
 
 class Cap:
@@ -761,6 +762,78 @@ class Agent:
         result = self.kernel.get_recovery_point(ledger_dir, run_id)
         return dict(result) if result else None
     
+    # ===== Phase 10: Shared Memory API =====
+
+    def write_shared(self, data: bytes) -> int:
+        """
+        Write data to shared memory.
+        
+        Args:
+            data: Bytes to store.
+            
+        Returns:
+            Handle ID (int).
+        """
+        return self.kernel.write_shared(data)
+
+    def read_shared(self, handle: int) -> bytes:
+        """
+        Read data from shared memory.
+        
+        Args:
+            handle: Handle ID.
+            
+        Returns:
+            Bytes data.
+        """
+        return bytes(self.kernel.read_shared(handle))
+
+    def free_shared(self, handle: int) -> bool:
+        """
+        Free shared memory.
+        
+        Args:
+            handle: Handle ID.
+            
+        Returns:
+            True if freed successfully.
+        """
+        return self.kernel.free_shared(handle)
+
+    def get_shared_stats(self) -> Dict[str, Any]:
+        """
+        Get statistics about shared memory usage.
+        
+        Returns:
+            Dict with stats (active_handles, bytes_live, peak_bytes, etc.)
+        """
+        return dict(self.kernel.shared_memory_stats())
+
+    @contextmanager
+    def shared_buffer(self, data: bytes):
+        """
+        Context manager for temporary shared memory allocation.
+        
+        Guarantees that memory is freed when the context exits.
+        
+        Args:
+            data: Bytes to write.
+            
+        Yields:
+            Handle ID (int).
+            
+        Example:
+            ```python
+            with agent.shared_buffer(b"data") as h:
+                process(h)
+            ```
+        """
+        handle = self.write_shared(data)
+        try:
+            yield handle
+        finally:
+            self.free_shared(handle)
+
     def __repr__(self) -> str:
         return f"Agent(nodes={self.node_count()}, events={self.event_count()}, seed={self.get_seed()})"
 
