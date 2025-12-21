@@ -16,6 +16,8 @@ jobs:
 
       - name: Build package (manylinux)
         uses: PyO3/maturin-action@v1
+        env:
+          PYO3_USE_ABI3_FORWARD_COMPATIBILITY: 1
         with:
           command: build
           args: --release --sdist --out dist --find-interpreter
