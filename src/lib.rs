@@ -6,6 +6,7 @@
 
 pub mod core;
 pub mod adapters;
+pub mod governance;
 
 use pyo3::prelude::*;
 use crate::core::{PyKernel, PyEvent, PyNode, PyPolicy, PyCap};

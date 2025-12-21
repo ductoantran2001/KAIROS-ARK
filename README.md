@@ -345,6 +345,50 @@ plugins = agent.kernel.list_plugins()
 
 ---
 
+## Phase 6: Governance & HITL
+
+Human-in-the-Loop approval nodes and audit verification.
+
+### Approval Gateway
+
+```python
+# Request approval for sensitive action
+request_id = agent.kernel.request_approval("run_001", "delete_node", "Delete user data?")
+
+# Check status (in another process/API)
+status = agent.kernel.check_approval(request_id)  # "pending"
+
+# Approve or reject
+agent.kernel.approve(request_id, approver="admin")
+agent.kernel.reject(request_id, "Not authorized", rejector="admin")
+
+# List all pending approvals
+pending = agent.kernel.list_pending_approvals()
+```
+
+### Audit Verification
+
+```python
+# Sign ledger for compliance
+ledger_json = agent.get_audit_log_json()
+signed = agent.kernel.sign_ledger(ledger_json, "run_001")
+
+# Verify integrity
+is_valid = agent.kernel.verify_ledger(signed)
+```
+
+---
+
+## Documentation
+
+- [Getting Started](docs/getting-started.md)
+- [Core Concepts: Scheduler](docs/core-concepts/scheduler.md)
+- [Core Concepts: Policy Engine](docs/core-concepts/policy-engine.md)
+- [Advanced: Zero-Copy Memory](docs/advanced/zero-copy.md)
+- [Advanced: Time-Travel Debugging](docs/advanced/time-travel.md)
+
+---
+
 ## Testing
 
 ```bash
