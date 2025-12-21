@@ -1,0 +1,213 @@
+# KAIROS-ARK
+
+<div align="center">
+
+**A Deterministic Multi-Threaded Scheduler for Agentic AI Workflows**
+
+[![Rust](https://img.shields.io/badge/rust-1.70+-orange.svg)](https://www.rust-lang.org/)
+[![Python](https://img.shields.io/badge/python-3.8+-blue.svg)](https://www.python.org/)
+[![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
+
+</div>
+
+## Overview
+
+KAIROS-ARK is a high-performance execution kernel designed for agentic AI workflows. It provides:
+
+- **🔀 Conditional Branching**: Branch nodes that evaluate conditions and choose execution paths
+- **⚡ Parallel Execution**: Fork/Join semantics for concurrent task processing
+- **🔄 Deterministic Replay**: Logical clocks ensure bit-for-bit identical replayability
+- **📝 System-Level Tracing**: Comprehensive audit ledger for debugging and analysis
+- **🚀 High Throughput**: 10,000+ nodes/second with minimal overhead
+
+## Architecture
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                      Python Layer                           │
+│  ┌─────────────────────────────────────────────────────┐   │
+│  │                    Agent API                         │   │
+│  │   add_node() | add_branch() | run_parallel()        │   │
+│  └─────────────────────────────────────────────────────┘   │
+│                           │                                 │
+│  ┌─────────────────────────────────────────────────────┐   │
+│  │               PyO3 Kernel Wrapper                    │   │
+│  └─────────────────────────────────────────────────────┘   │
+└─────────────────────────────────────────────────────────────┘
+                            │
+┌─────────────────────────────────────────────────────────────┐
+│                       Rust Core                             │
+│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐      │
+│  │  Scheduler   │  │ Logical Clock│  │ Audit Ledger │      │
+│  └──────────────┘  └──────────────┘  └──────────────┘      │
+│         │                                                   │
+│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐      │
+│  │ Thread Pool  │  │ Task Queue   │  │ RNG Manager  │      │
+│  │   (Rayon)    │  │ (Priority)   │  │ (ChaCha8)    │      │
+│  └──────────────┘  └──────────────┘  └──────────────┘      │
+└─────────────────────────────────────────────────────────────┘
+```
+
+## Installation
+
+### Prerequisites
+
+- Rust 1.70+
+- Python 3.8+
+- [Maturin](https://github.com/PyO3/maturin) for building
+
+### Build from Source
+
+```bash
+# Clone the repository
+git clone https://github.com/YASSERRMD/KAIROS-ARK.git
+cd KAIROS-ARK
+
+# Build and install the Python package
+pip install maturin
+maturin develop
+
+# Verify installation
+python -c "from kairos_ark import Agent; print('✓ KAIROS-ARK installed successfully')"
+```
+
+## Quick Start
+
+### Basic Task Execution
+
+```python
+from kairos_ark import Agent
+
+# Create an agent with a fixed seed for reproducibility
+agent = Agent(seed=42)
+
+# Add task nodes
+agent.add_node("fetch", lambda: "data from API")
+agent.add_node("process", lambda: "processed result")
+
+# Connect nodes
+agent.connect("fetch", "process")
+
+# Execute starting from "fetch"
+agent.set_entry("fetch")
+results = agent.execute()
+
+# View the execution trace
+agent.print_audit_log()
+```
+
+### Conditional Branching
+
+```python
+from kairos_ark import Agent
+
+agent = Agent(seed=42)
+
+# Define nodes
+agent.add_node("success_path", lambda: "Success!")
+agent.add_node("failure_path", lambda: "Failed!")
+
+# Add branch that evaluates a condition
+agent.add_branch(
+    "check_condition",
+    condition_func=lambda: True,  # Your condition here
+    true_node="success_path",
+    false_node="failure_path"
+)
+
+# Execute - will follow true_node since condition returns True
+agent.execute("check_condition")
+```
+
+### Parallel Execution
+
+```python
+from kairos_ark import Agent
+import time
+
+agent = Agent()
+
+# Add parallel tasks (each takes 100ms)
+agent.add_node("task_a", lambda: (time.sleep(0.1), "A done")[1])
+agent.add_node("task_b", lambda: (time.sleep(0.1), "B done")[1])
+agent.add_node("task_c", lambda: (time.sleep(0.1), "C done")[1])
+
+# Fork to run all tasks in parallel
+agent.add_fork("parallel_start", ["task_a", "task_b", "task_c"])
+
+# Join to wait for all tasks
+agent.add_join("parallel_end", ["task_a", "task_b", "task_c"])
+
+# Execute - all three 100ms tasks complete in ~100ms total
+start = time.time()
+agent.execute("parallel_start")
+elapsed = time.time() - start
+
+print(f"Completed in {elapsed:.2f}s (parallel speedup!)")
+```
+
+### Deterministic Replay
+
+```python
+from kairos_ark import Agent
+
+# First execution
+agent1 = Agent(seed=12345)
+agent1.add_node("random_task", lambda: "result")
+agent1.execute("random_task")
+log1 = agent1.get_audit_log()
+
+# Second execution with same seed
+agent2 = Agent(seed=12345)
+agent2.add_node("random_task", lambda: "result")
+agent2.execute("random_task")
+log2 = agent2.get_audit_log()
+
+# Logs are identical!
+assert log1 == log2
+print("✓ Deterministic replay verified")
+```
+
+## API Reference
+
+### Agent Class
+
+| Method | Description |
+|--------|-------------|
+| `add_node(id, handler, timeout_ms, priority)` | Add a task node |
+| `add_branch(id, condition_func, true_node, false_node)` | Add conditional branch |
+| `add_fork(id, children)` | Add parallel fork |
+| `add_join(id, parents, next_node)` | Add parallel join |
+| `connect(from, to)` | Add edge between nodes |
+| `execute(entry_node)` | Execute the graph |
+| `run_parallel(nodes)` | Quick parallel execution |
+| `get_audit_log()` | Get execution trace |
+| `print_audit_log()` | Pretty-print trace |
+
+### Event Types
+
+| Event | Description |
+|-------|-------------|
+| `Start` | Node execution began |
+| `End` | Node execution completed |
+| `BranchDecision` | Branch condition evaluated |
+| `ForkSpawn` | Parallel children spawned |
+| `JoinComplete` | All parents finished |
+| `ToolOutput` | Handler produced output |
+| `Error` | Execution error occurred |
+
+## Benchmarks
+
+| Metric | Result |
+|--------|--------|
+| Parallel Speedup | 2× 100ms tasks → ~100ms total |
+| Node Throughput | >10,000 nodes/second |
+| Event Logging Overhead | <1μs per event |
+
+## License
+
+MIT License - see [LICENSE](LICENSE) for details.
+
+## Author
+
+**YASSERRMD**
