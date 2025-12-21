@@ -91,6 +91,27 @@ pub enum EventType {
         /// Number of attempts made
         attempted: u32,
     },
+    /// State snapshot was created
+    SnapshotCreated {
+        /// Path to snapshot file
+        path: String,
+        /// Event count at snapshot
+        event_count: u64,
+    },
+    /// Execution resumed from checkpoint
+    ResumeFromCheckpoint {
+        /// Logical timestamp of checkpoint
+        checkpoint_ts: u64,
+        /// Node to resume from
+        resume_node: Option<String>,
+    },
+    /// External/nondeterministic value was captured
+    ExternalCapture {
+        /// Source of the value (e.g., "llm", "http", "timestamp")
+        source: String,
+        /// Captured value (serialized)
+        value: String,
+    },
 }
 
 impl EventType {
@@ -111,6 +132,9 @@ impl EventType {
             EventType::PolicyDeny { .. } => "POLICY_DENY",
             EventType::ContentRedacted { .. } => "CONTENT_REDACTED",
             EventType::CallLimitExceeded { .. } => "CALL_LIMIT_EXCEEDED",
+            EventType::SnapshotCreated { .. } => "SNAPSHOT_CREATED",
+            EventType::ResumeFromCheckpoint { .. } => "RESUME_FROM_CHECKPOINT",
+            EventType::ExternalCapture { .. } => "EXTERNAL_CAPTURE",
         }
     }
 }

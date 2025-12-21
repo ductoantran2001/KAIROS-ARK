@@ -587,6 +587,15 @@ impl PyKernel {
                 EventType::CallLimitExceeded { tool_id, limit, attempted } => {
                     format!("CallLimitExceeded({}, limit={}, attempted={})", tool_id, limit, attempted)
                 }
+                EventType::SnapshotCreated { path, event_count } => {
+                    format!("SnapshotCreated({}, events={})", path, event_count)
+                }
+                EventType::ResumeFromCheckpoint { checkpoint_ts, resume_node } => {
+                    format!("ResumeFromCheckpoint(ts={}, node={:?})", checkpoint_ts, resume_node)
+                }
+                EventType::ExternalCapture { source, value } => {
+                    format!("ExternalCapture({}, len={})", source, value.len())
+                }
             };
 
             let dict = PyDict::new(py);
@@ -667,6 +676,167 @@ impl PyKernel {
         }))
     }
 
+    /// Save the current audit log to a JSONL file.
+    fn save_ledger(&self, path: String) -> PyResult<()> {
+        use crate::core::persistence::{DurableLedger, LedgerConfig, PersistentEvent};
+        use std::path::Path;
+
+        let config = LedgerConfig::new(&path).with_sync_flush();
+        let durable = DurableLedger::new(config)
+            .map_err(|e| PyRuntimeError::new_err(format!("Failed to create ledger file: {}", e)))?;
+
+        let seed = *self.seed.lock();
+        for event in self.ledger.get_events_sorted() {
+            durable.append(event, seed)
+                .map_err(|e| PyRuntimeError::new_err(format!("Failed to write event: {}", e)))?;
+        }
+        durable.flush()
+            .map_err(|e| PyRuntimeError::new_err(format!("Failed to flush: {}", e)))?;
+
+        Ok(())
+    }
+
+    /// Load audit log from a JSONL file and return events.
+    fn load_ledger<'py>(&self, py: Python<'py>, path: String) -> PyResult<&'py PyList> {
+        use crate::core::persistence::DurableLedger;
+        use std::path::Path;
+
+        let events = DurableLedger::read_all(Path::new(&path))
+            .map_err(|e| PyRuntimeError::new_err(format!("Failed to read ledger: {}", e)))?;
+
+        let py_list = PyList::empty(py);
+        for event in events {
+            let dict = PyDict::new(py);
+            dict.set_item("logical_timestamp", event.event.logical_timestamp)?;
+            dict.set_item("node_id", &event.event.node_id)?;
+            dict.set_item("event_type", event.event.event_type.as_str())?;
+            dict.set_item("payload", &event.event.payload)?;
+            dict.set_item("run_id", &event.run_id)?;
+            dict.set_item("wall_clock_ms", event.wall_clock_ms)?;
+            dict.set_item("rng_state", event.rng_state)?;
+            py_list.append(dict)?;
+        }
+
+        Ok(py_list)
+    }
+
+    /// Replay a ledger and return the final state.
+    fn replay_ledger<'py>(&self, py: Python<'py>, path: String) -> PyResult<&'py PyDict> {
+        use crate::core::replay::{ReplayScheduler, ReplayMode};
+        use std::path::Path;
+
+        let mut scheduler = ReplayScheduler::from_ledger(Path::new(&path), ReplayMode::FastForward)
+            .map_err(|e| PyRuntimeError::new_err(format!("Failed to load ledger: {}", e)))?;
+
+        // Replay all events
+        while scheduler.step().is_some() {}
+
+        let state = scheduler.fork();
+        let dict = PyDict::new(py);
+        dict.set_item("clock_value", state.clock_value)?;
+        dict.set_item("rng_state", state.rng_state)?;
+        dict.set_item("last_node", state.last_node)?;
+
+        let outputs = PyDict::new(py);
+        for (k, v) in &state.node_outputs {
+            outputs.set_item(k, v)?;
+        }
+        dict.set_item("node_outputs", outputs)?;
+
+        Ok(dict)
+    }
+
+    /// Create a state snapshot.
+    fn create_snapshot(&self, path: String, run_id: Option<String>) -> PyResult<()> {
+        use crate::core::persistence::StateSnapshot;
+        use std::path::Path;
+
+        let seed = self.seed.lock().unwrap_or(0);
+        let clock = self.clock.current();
+
+        // Collect node outputs from ledger
+        let mut outputs = HashMap::new();
+        let mut last_node = None;
+        for event in self.ledger.get_events_sorted() {
+            if let EventType::End = &event.event_type {
+                last_node = Some(event.node_id.clone());
+                if let Some(payload) = &event.payload {
+                    outputs.insert(event.node_id.clone(), payload.clone());
+                }
+            }
+        }
+
+        let snapshot = StateSnapshot::new(
+            run_id,
+            clock,
+            seed,
+            outputs,
+            last_node,
+            clock,
+        );
+
+        snapshot.save(Path::new(&path))
+            .map_err(|e| PyRuntimeError::new_err(format!("Failed to save snapshot: {}", e)))?;
+
+        Ok(())
+    }
+
+    /// Load a snapshot and return state info.
+    fn load_snapshot<'py>(&self, py: Python<'py>, path: String) -> PyResult<&'py PyDict> {
+        use crate::core::persistence::StateSnapshot;
+        use std::path::Path;
+
+        let snapshot = StateSnapshot::load(Path::new(&path))
+            .map_err(|e| PyRuntimeError::new_err(format!("Failed to load snapshot: {}", e)))?;
+
+        let dict = PyDict::new(py);
+        dict.set_item("version", snapshot.version)?;
+        dict.set_item("run_id", snapshot.run_id)?;
+        dict.set_item("clock_value", snapshot.clock_value)?;
+        dict.set_item("rng_state", snapshot.rng_state)?;
+        dict.set_item("last_node", snapshot.last_node)?;
+        dict.set_item("last_timestamp", snapshot.last_timestamp)?;
+        dict.set_item("created_at_ms", snapshot.created_at_ms)?;
+
+        let outputs = PyDict::new(py);
+        for (k, v) in &snapshot.node_outputs {
+            outputs.set_item(k, v)?;
+        }
+        dict.set_item("node_outputs", outputs)?;
+
+        Ok(dict)
+    }
+
+    /// Check if a run has a recovery point.
+    fn has_recovery(&self, ledger_dir: String, run_id: String) -> PyResult<bool> {
+        use crate::core::recovery::RecoveryManager;
+
+        let manager = RecoveryManager::new(&ledger_dir);
+        Ok(manager.has_pending_run(&run_id))
+    }
+
+    /// Get recovery point info.
+    fn get_recovery_point<'py>(&self, py: Python<'py>, ledger_dir: String, run_id: String) -> PyResult<Option<&'py PyDict>> {
+        use crate::core::recovery::RecoveryManager;
+
+        let manager = RecoveryManager::new(&ledger_dir);
+        match manager.get_recovery_point(&run_id) {
+            Ok(Some(point)) => {
+                let dict = PyDict::new(py);
+                dict.set_item("run_id", &point.run_id)?;
+                dict.set_item("last_node", &point.last_node)?;
+                dict.set_item("last_timestamp", point.last_timestamp)?;
+                dict.set_item("event_count", point.event_count)?;
+                dict.set_item("completed", point.completed)?;
+                dict.set_item("snapshot_path", point.snapshot_path.map(|p| p.to_string_lossy().to_string()))?;
+                dict.set_item("ledger_path", point.ledger_path.to_string_lossy().to_string())?;
+                Ok(Some(dict))
+            }
+            Ok(None) => Ok(None),
+            Err(e) => Err(PyRuntimeError::new_err(format!("Failed to get recovery point: {}", e))),
+        }
+    }
+
     fn __repr__(&self) -> String {
         format!(
             "PyKernel(nodes={}, events={}, seed={:?})",
@@ -676,3 +846,4 @@ impl PyKernel {
         )
     }
 }
+
