@@ -13,7 +13,7 @@ use crate::core::{PyKernel, PyEvent, PyNode, PyPolicy, PyCap};
 
 /// KAIROS-ARK Python module
 #[pymodule]
-fn _core(_py: Python<'_>, m: &PyModule) -> PyResult<()> {
+fn _core(_py: Python<'_>, m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<PyKernel>()?;
     m.add_class::<PyEvent>()?;
     m.add_class::<PyNode>()?;

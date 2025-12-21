@@ -7,7 +7,7 @@ use std::collections::HashMap;
 use std::io;
 use std::path::Path;
 
-use crate::core::ledger::{Event, EventType};
+use crate::core::ledger::{EventType};
 use crate::core::persistence::{DurableLedger, PersistentEvent, StateSnapshot};
 
 /// Replay mode.
@@ -78,7 +78,7 @@ pub struct ReplayScheduler {
     /// Replay mode
     mode: ReplayMode,
     /// Run ID being replayed
-    run_id: Option<String>,
+    _run_id: Option<String>,
 }
 
 impl ReplayScheduler {
@@ -92,7 +92,7 @@ impl ReplayScheduler {
             current_index: 0,
             state: StateStore::default(),
             mode,
-            run_id,
+            _run_id: run_id,
         })
     }
 
@@ -105,7 +105,7 @@ impl ReplayScheduler {
             current_index: 0,
             state: StateStore::default(),
             mode,
-            run_id: Some(run_id.to_string()),
+            _run_id: Some(run_id.to_string()),
         })
     }
 
@@ -120,7 +120,7 @@ impl ReplayScheduler {
             current_index: 0,
             state: StateStore::from_snapshot(snapshot),
             mode,
-            run_id: snapshot.run_id.clone(),
+            _run_id: snapshot.run_id.clone(),
         }
     }
 

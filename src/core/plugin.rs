@@ -4,7 +4,7 @@
 //! Plugins can be written in any language that exports C functions.
 
 use std::collections::HashMap;
-use std::ffi::{CStr, CString};
+
 use std::os::raw::c_char;
 use std::path::Path;
 

@@ -5,7 +5,7 @@
 
 use std::fs;
 use std::io;
-use std::path::{Path, PathBuf};
+use std::path::{PathBuf};
 
 use crate::core::persistence::{DurableLedger, PersistentEvent, StateSnapshot};
 use crate::core::replay::{ReplayScheduler, ReplayMode, StateStore};

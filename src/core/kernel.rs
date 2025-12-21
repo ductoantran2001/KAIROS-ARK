@@ -130,7 +130,7 @@ pub struct PyPolicy {
     pub(crate) allowed_capabilities: u32,
     pub(crate) max_tool_calls: HashMap<String, u32>,
     pub(crate) forbidden_content: Vec<String>,
-    pub(crate) content_action: String,
+    pub(crate) _content_action: String,
     pub(crate) name: String,
 }
 
@@ -159,7 +159,7 @@ impl PyPolicy {
             allowed_capabilities: caps,
             max_tool_calls: max_tool_calls.unwrap_or_default(),
             forbidden_content: forbidden_content.unwrap_or_default(),
-            content_action: content_action.to_string(),
+            _content_action: content_action.to_string(),
             name: name.to_string(),
         }
     }
@@ -171,7 +171,7 @@ impl PyPolicy {
             allowed_capabilities: u32::MAX,
             max_tool_calls: HashMap::new(),
             forbidden_content: Vec::new(),
-            content_action: "redact".to_string(),
+            _content_action: "redact".to_string(),
             name: "permissive".to_string(),
         }
     }
@@ -183,7 +183,7 @@ impl PyPolicy {
             allowed_capabilities: 0,
             max_tool_calls: HashMap::new(),
             forbidden_content: Vec::new(),
-            content_action: "block".to_string(),
+            _content_action: "block".to_string(),
             name: "restrictive".to_string(),
         }
     }
@@ -195,7 +195,7 @@ impl PyPolicy {
             allowed_capabilities: u32::MAX & !(0b00000001 | 0b10000000), // No NET_ACCESS or EXTERNAL_API
             max_tool_calls: HashMap::new(),
             forbidden_content: Vec::new(),
-            content_action: "redact".to_string(),
+            _content_action: "redact".to_string(),
             name: "no_network".to_string(),
         }
     }
@@ -394,7 +394,7 @@ impl PyKernel {
             None => return Ok((true, None)),
         };
 
-        let limit = match policy.max_tool_calls.get(&tool_id) {
+        let _limit = match policy.max_tool_calls.get(&tool_id) {
             Some(&limit) => limit,
             None => return Ok((true, None)), // No limit
         };
@@ -425,7 +425,8 @@ impl PyKernel {
     }
 
     /// Execute the graph and return results.
-    fn execute<'py>(&self, py: Python<'py>, entry_node: Option<String>) -> PyResult<&'py PyList> {
+    #[pyo3(signature = (entry_node=None))]
+    fn execute<'py>(&self, py: Python<'py>, entry_node: Option<String>) -> PyResult<PyObject> {
         // Clone data we need, releasing locks before execution
         let mut graph = self.graph.lock().clone();
         let seed = *self.seed.lock();
@@ -436,17 +437,22 @@ impl PyKernel {
             graph.set_entry(entry);
         }
         
-        // Clone handlers and conditions to avoid holding lock during execution
         let (handlers, conditions) = {
             let callbacks = self.callbacks.lock();
-            (callbacks.handlers.clone(), callbacks.conditions.clone())
+            let handlers: HashMap<String, PyObject> = callbacks.handlers.iter()
+                .map(|(k, v)| (k.clone(), v.clone_ref(py)))
+                .collect();
+            let conditions: HashMap<String, PyObject> = callbacks.conditions.iter()
+                .map(|(k, v)| (k.clone(), v.clone_ref(py)))
+                .collect();
+            (handlers, conditions)
         };
         
         let scheduler = Scheduler::with_config(graph, seed, num_threads);
 
         // Register handlers (cloned, so no lock held)
-        for (handler_id, py_handler) in handlers.iter() {
-            let handler_clone = py_handler.clone();
+        for (handler_id, py_handler) in handlers {
+            let handler_clone = py_handler;
             scheduler.register_handler(handler_id, move |node_id, _ctx| {
                 Python::with_gil(|py| {
                     let result = handler_clone
@@ -463,8 +469,8 @@ impl PyKernel {
         }
 
         // Register conditions (cloned, so no lock held)
-        for (condition_id, py_condition) in conditions.iter() {
-            let condition_clone = py_condition.clone();
+        for (condition_id, py_condition) in conditions {
+            let condition_clone = py_condition;
             scheduler.register_condition(condition_id, move || {
                 Python::with_gil(|py| {
                     condition_clone
@@ -506,7 +512,7 @@ impl PyKernel {
                     dict.set_item("logical_timestamp", result.logical_timestamp)?;
                     py_results.append(dict)?;
                 }
-                Ok(py_results)
+                Ok(py_results.into())
             }
             Err(e) => Err(PyRuntimeError::new_err(format!("Execution error: {}", e))),
         }
@@ -544,7 +550,7 @@ impl PyKernel {
     }
 
     /// Get the audit log as a list of events.
-    fn get_audit_log<'py>(&self, py: Python<'py>) -> PyResult<&'py PyList> {
+    fn get_audit_log<'py>(&self, py: Python<'py>) -> PyResult<PyObject> {
         let events = self.ledger.get_events_sorted();
         let py_list = PyList::empty(py);
         
@@ -607,7 +613,7 @@ impl PyKernel {
             py_list.append(dict)?;
         }
         
-        Ok(py_list)
+        Ok(py_list.into())
     }
 
     /// Get the audit log as JSON.
@@ -650,10 +656,10 @@ impl PyKernel {
     }
 
     /// List all node IDs in the graph.
-    fn list_nodes<'py>(&self, py: Python<'py>) -> PyResult<&'py PyList> {
+    fn list_nodes<'py>(&self, py: Python<'py>) -> PyResult<PyObject> {
         let graph = self.graph.lock();
         let nodes: Vec<_> = graph.node_ids().cloned().collect();
-        Ok(PyList::new(py, nodes))
+        Ok(PyList::new(py, nodes)?.into())
     }
 
     /// Get information about a specific node.
@@ -698,7 +704,7 @@ impl PyKernel {
     }
 
     /// Load audit log from a JSONL file and return events.
-    fn load_ledger<'py>(&self, py: Python<'py>, path: String) -> PyResult<&'py PyList> {
+    fn load_ledger<'py>(&self, py: Python<'py>, path: String) -> PyResult<PyObject> {
         use crate::core::persistence::DurableLedger;
         use std::path::Path;
 
@@ -718,11 +724,11 @@ impl PyKernel {
             py_list.append(dict)?;
         }
 
-        Ok(py_list)
+        Ok(py_list.into())
     }
 
     /// Replay a ledger and return the final state.
-    fn replay_ledger<'py>(&self, py: Python<'py>, path: String) -> PyResult<&'py PyDict> {
+    fn replay_ledger<'py>(&self, py: Python<'py>, path: String) -> PyResult<PyObject> {
         use crate::core::replay::{ReplayScheduler, ReplayMode};
         use std::path::Path;
 
@@ -744,10 +750,11 @@ impl PyKernel {
         }
         dict.set_item("node_outputs", outputs)?;
 
-        Ok(dict)
+        Ok(dict.into())
     }
 
     /// Create a state snapshot.
+    #[pyo3(signature = (path, run_id=None))]
     fn create_snapshot(&self, path: String, run_id: Option<String>) -> PyResult<()> {
         use crate::core::persistence::StateSnapshot;
         use std::path::Path;
@@ -783,7 +790,7 @@ impl PyKernel {
     }
 
     /// Load a snapshot and return state info.
-    fn load_snapshot<'py>(&self, py: Python<'py>, path: String) -> PyResult<&'py PyDict> {
+    fn load_snapshot<'py>(&self, py: Python<'py>, path: String) -> PyResult<PyObject> {
         use crate::core::persistence::StateSnapshot;
         use std::path::Path;
 
@@ -805,7 +812,7 @@ impl PyKernel {
         }
         dict.set_item("node_outputs", outputs)?;
 
-        Ok(dict)
+        Ok(dict.into())
     }
 
     /// Check if a run has a recovery point.
@@ -817,7 +824,7 @@ impl PyKernel {
     }
 
     /// Get recovery point info.
-    fn get_recovery_point<'py>(&self, py: Python<'py>, ledger_dir: String, run_id: String) -> PyResult<Option<&'py PyDict>> {
+    fn get_recovery_point<'py>(&self, py: Python<'py>, ledger_dir: String, run_id: String) -> PyResult<Option<PyObject>> {
         use crate::core::recovery::RecoveryManager;
 
         let manager = RecoveryManager::new(&ledger_dir);
@@ -831,7 +838,7 @@ impl PyKernel {
                 dict.set_item("completed", point.completed)?;
                 dict.set_item("snapshot_path", point.snapshot_path.map(|p| p.to_string_lossy().to_string()))?;
                 dict.set_item("ledger_path", point.ledger_path.to_string_lossy().to_string())?;
-                Ok(Some(dict))
+                Ok(Some(dict.into()))
             }
             Ok(None) => Ok(None),
             Err(e) => Err(PyRuntimeError::new_err(format!("Failed to get recovery point: {}", e))),
@@ -860,7 +867,7 @@ impl PyKernel {
     }
 
     /// Get shared memory pool stats.
-    fn shared_memory_stats<'py>(&self, py: Python<'py>) -> PyResult<&'py PyDict> {
+    fn shared_memory_stats<'py>(&self, py: Python<'py>) -> PyResult<PyObject> {
         use crate::core::shared_memory::global_store;
         
         let store = global_store();
@@ -869,7 +876,7 @@ impl PyKernel {
         dict.set_item("used", store.used())?;
         dict.set_item("available", store.available())?;
         dict.set_item("allocations", store.allocation_count())?;
-        Ok(dict)
+        Ok(dict.into())
     }
 
     // ===== Phase 4: Plugins =====
@@ -899,7 +906,7 @@ impl PyKernel {
     }
 
     /// List all loaded plugins.
-    fn list_plugins<'py>(&self, py: Python<'py>) -> PyResult<&'py PyList> {
+    fn list_plugins<'py>(&self, py: Python<'py>) -> PyResult<PyObject> {
         use crate::core::plugin::global_loader;
         
         let plugins = global_loader().list();
@@ -914,7 +921,7 @@ impl PyKernel {
             py_list.append(dict)?;
         }
         
-        Ok(py_list)
+        Ok(py_list.into())
     }
 
     // ===== Phase 5: State Store (LangGraph Integration) =====
@@ -946,10 +953,10 @@ impl PyKernel {
     }
 
     /// Get all state keys.
-    fn state_keys<'py>(&self, py: Python<'py>) -> PyResult<&'py PyList> {
+    fn state_keys<'py>(&self, py: Python<'py>) -> PyResult<PyObject> {
         use crate::adapters::global_state_store;
         let keys = global_state_store().keys();
-        Ok(PyList::new(py, keys))
+        Ok(PyList::new(py, keys)?.into())
     }
 
     /// Get state version.
@@ -980,7 +987,7 @@ impl PyKernel {
     }
 
     /// List MCP tools.
-    fn mcp_list_tools<'py>(&self, py: Python<'py>) -> PyResult<&'py PyList> {
+    fn mcp_list_tools<'py>(&self, py: Python<'py>) -> PyResult<PyObject> {
         use crate::adapters::mcp::global_mcp_server;
         
         let tools = global_mcp_server().list_tools();
@@ -994,7 +1001,7 @@ impl PyKernel {
             py_list.append(dict)?;
         }
         
-        Ok(py_list)
+        Ok(py_list.into())
     }
 
     /// Call an MCP tool.
@@ -1022,12 +1029,14 @@ impl PyKernel {
     }
 
     /// Approve a pending request.
+    #[pyo3(signature = (request_id, approver=None))]
     fn approve(&self, request_id: String, approver: Option<String>) -> PyResult<bool> {
         use crate::governance::approval::global_gateway;
         Ok(global_gateway().approve(&request_id, approver.as_deref()))
     }
 
     /// Reject a pending request.
+    #[pyo3(signature = (request_id, reason, rejector=None))]
     fn reject(&self, request_id: String, reason: String, rejector: Option<String>) -> PyResult<bool> {
         use crate::governance::approval::global_gateway;
         Ok(global_gateway().reject(&request_id, &reason, rejector.as_deref()))
@@ -1040,7 +1049,7 @@ impl PyKernel {
     }
 
     /// List pending approvals.
-    fn list_pending_approvals<'py>(&self, py: Python<'py>) -> PyResult<&'py PyList> {
+    fn list_pending_approvals<'py>(&self, py: Python<'py>) -> PyResult<PyObject> {
         use crate::governance::approval::global_gateway;
         
         let pending = global_gateway().list_pending();
@@ -1056,7 +1065,7 @@ impl PyKernel {
             py_list.append(dict)?;
         }
         
-        Ok(py_list)
+        Ok(py_list.into())
     }
 
     // ===== Phase 6: Audit Verification =====

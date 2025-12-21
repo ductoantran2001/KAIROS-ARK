@@ -5,9 +5,9 @@
 
 use std::collections::VecDeque;
 use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
-use std::sync::Arc;
 
-use parking_lot::{Mutex, RwLock};
+
+use parking_lot::{Mutex};
 use rayon::prelude::*;
 
 /// Agent ID type.

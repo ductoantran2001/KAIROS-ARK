@@ -4,7 +4,7 @@
 //! can use instead of Python dictionaries for state management.
 
 use std::collections::HashMap;
-use std::sync::Arc;
+
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use parking_lot::RwLock;
