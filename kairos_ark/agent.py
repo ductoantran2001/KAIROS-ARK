@@ -628,6 +628,107 @@ class Agent:
         self._tools.clear()
         self._policy = None
     
+    # ===== Persistence & Replay (Phase 3) =====
+    
+    def save_ledger(self, path: str) -> None:
+        """
+        Save the audit log to a JSONL file for later replay.
+        
+        Args:
+            path: File path to save the ledger.
+            
+        Example:
+            ```python
+            agent.execute("start")
+            agent.save_ledger("/tmp/run.jsonl")
+            ```
+        """
+        self.kernel.save_ledger(path)
+    
+    def load_ledger(self, path: str) -> List[Dict[str, Any]]:
+        """
+        Load a saved ledger from file.
+        
+        Args:
+            path: Path to the JSONL ledger file.
+            
+        Returns:
+            List of persistent events with metadata.
+        """
+        events = self.kernel.load_ledger(path)
+        return [dict(e) for e in events]
+    
+    def replay(self, ledger_path: str) -> Dict[str, Any]:
+        """
+        Replay a saved ledger and return the reconstructed state.
+        
+        This replays all events to reconstruct the execution state
+        without re-invoking handlers.
+        
+        Args:
+            ledger_path: Path to the saved ledger file.
+            
+        Returns:
+            Dict with reconstructed state:
+            - clock_value: Final logical timestamp
+            - rng_state: Final RNG state
+            - last_node: Last completed node
+            - node_outputs: Dict of node_id -> output
+        """
+        return dict(self.kernel.replay_ledger(ledger_path))
+    
+    def create_snapshot(self, path: str, run_id: Optional[str] = None) -> None:
+        """
+        Create a state snapshot for fast recovery.
+        
+        Snapshots capture the current execution state allowing
+        faster recovery than replaying the entire ledger.
+        
+        Args:
+            path: File path to save the snapshot.
+            run_id: Optional run identifier.
+        """
+        self.kernel.create_snapshot(path, run_id)
+    
+    def load_snapshot(self, path: str) -> Dict[str, Any]:
+        """
+        Load a state snapshot.
+        
+        Args:
+            path: Path to the snapshot file.
+            
+        Returns:
+            Dict with snapshot state.
+        """
+        return dict(self.kernel.load_snapshot(path))
+    
+    def has_recovery(self, ledger_dir: str, run_id: str) -> bool:
+        """
+        Check if a run has a recovery point.
+        
+        Args:
+            ledger_dir: Directory containing ledger files.
+            run_id: Run identifier to check.
+            
+        Returns:
+            True if there's a pending (incomplete) run to recover.
+        """
+        return self.kernel.has_recovery(ledger_dir, run_id)
+    
+    def get_recovery_point(self, ledger_dir: str, run_id: str) -> Optional[Dict[str, Any]]:
+        """
+        Get recovery point information.
+        
+        Args:
+            ledger_dir: Directory containing ledger files.
+            run_id: Run identifier.
+            
+        Returns:
+            Dict with recovery info, or None if no recovery point.
+        """
+        result = self.kernel.get_recovery_point(ledger_dir, run_id)
+        return dict(result) if result else None
+    
     def __repr__(self) -> str:
         return f"Agent(nodes={self.node_count()}, events={self.event_count()}, seed={self.get_seed()})"
 
