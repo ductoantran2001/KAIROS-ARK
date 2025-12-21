@@ -649,10 +649,11 @@ class Agent:
     
     def clear(self) -> None:
         """
-        Clear the graph, audit log, tools, and policy.
+        Clear the graph, audit log, tools, policy, and shared memory.
         """
         self.kernel.clear_graph()
         self.kernel.clear_audit_log()
+        self.kernel.clear_shared_memory()
         self._handlers.clear()
         self._conditions.clear()
         self._node_handlers.clear()
