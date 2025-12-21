@@ -78,6 +78,7 @@ impl PyNode {
 pub struct PyCap;
 
 #[pymethods]
+#[allow(non_snake_case)]
 impl PyCap {
     #[staticmethod]
     fn NET_ACCESS() -> u32 { 0b00000001 }
@@ -678,8 +679,8 @@ impl PyKernel {
 
     /// Save the current audit log to a JSONL file.
     fn save_ledger(&self, path: String) -> PyResult<()> {
-        use crate::core::persistence::{DurableLedger, LedgerConfig, PersistentEvent};
-        use std::path::Path;
+        use crate::core::persistence::{DurableLedger, LedgerConfig};
+
 
         let config = LedgerConfig::new(&path).with_sync_flush();
         let durable = DurableLedger::new(config)

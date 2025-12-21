@@ -13,7 +13,7 @@ use std::cmp::Ordering;
 use std::sync::Arc;
 
 use crate::core::{
-    Graph, Node, NodeType, NodeId,
+    Graph, NodeType, NodeId,
     AuditLedger, LogicalClock, EventType,
     SchedulerError, SchedulerResult, NodeStatus, NodeResult,
 };
@@ -196,7 +196,7 @@ pub struct Scheduler {
     /// Rayon thread pool for parallel execution
     thread_pool: rayon::ThreadPool,
     /// Task queue with priority support
-    task_queue: Arc<TaskQueue>,
+    _task_queue: Arc<TaskQueue>,
     /// Registered node handlers
     handlers: Arc<Mutex<HashMap<String, NodeHandler>>>,
     /// Branch condition evaluators
@@ -243,7 +243,7 @@ impl Scheduler {
             clock,
             seed,
             thread_pool,
-            task_queue: Arc::new(TaskQueue::new()),
+            _task_queue: Arc::new(TaskQueue::new()),
             handlers: Arc::new(Mutex::new(HashMap::new())),
             conditions: Arc::new(Mutex::new(HashMap::new())),
         }
