@@ -12,13 +12,7 @@
 
 </div>
 
-<br/>
 
-<div align="center">
-  <img src="assets/architecture_diagram.png" alt="KAIROS-ARK Architecture" width="100%">
-</div>
-
-<br/>
 
 ## Overview
 
@@ -30,6 +24,14 @@ It provides a specialized "Operating System" for agents, handling:
 - **Security**: Kernel-level policy enforcement and sandboxing.
 - **Time**: Logical clocks for bit-for-bit identical replay debugging.
 - **Governance**: Human-in-the-Loop (HITL) approvals and cryptographic audit logs.
+
+<br/>
+
+<div align="center">
+  <img src="assets/architecture_diagram.png" alt="KAIROS-ARK Architecture" width="100%">
+</div>
+
+<br/>
 
 ---
 
